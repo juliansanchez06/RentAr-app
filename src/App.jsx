@@ -243,26 +243,15 @@ export default function App() {
 
   async function pinValue(key,value) {
     try {
-      // Firestore can't store nested arrays of objects - store each item flat
-      let toStore = value;
-      if (Array.isArray(value)) {
-        // Store as separate keys: gastos_0, gastos_1, etc + gastos_count
-        const batch = {};
-        batch[key + "_count"] = value.length;
-        value.forEach((item, i) => {
-          batch[key + "_" + i + "_id"]     = item.id || i;
-          batch[key + "_" + i + "_nombre"] = item.nombre || "";
-          batch[key + "_" + i + "_monto"]  = item.monto || 0;
-        });
-        const updated = { ...pinnedValues, ...batch };
-        setPinnedValues(updated);
-        await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
-        return;
-      }
+      // Store everything as simple string values - most compatible with Firestore
+      const toStore = typeof value === "object" ? JSON.stringify(value) : value;
       const updated = { ...pinnedValues, [key]: toStore };
       setPinnedValues(updated);
       await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
-    } catch(e) { console.error("pinValue error:", e); alert("Error al guardar: " + e.message); }
+    } catch(e) {
+      console.error("pinValue error:", e);
+      alert("Error al guardar: " + e.message);
+    }
   }
 
   async function handleLogout() { await signOut(auth); setUser(null); setPage("dashboard"); }
@@ -602,17 +591,13 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
 
   function parseGastos(pv) {
     if (!pv) return defaultGastos;
-    const count = pv["gastos_count"];
-    if (!count || count === 0) return defaultGastos;
-    const result = [];
-    for (let i = 0; i < count; i++) {
-      result.push({
-        id:     pv["gastos_" + i + "_id"]     || i + 1,
-        nombre: pv["gastos_" + i + "_nombre"] || "",
-        monto:  pv["gastos_" + i + "_monto"]  || 0,
-      });
-    }
-    return result.length > 0 ? result : defaultGastos;
+    const raw = pv["gastos"];
+    if (!raw) return defaultGastos;
+    try {
+      const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch(e) { console.error("parseGastos error:", e); }
+    return defaultGastos;
   }
 
   const [gastos,setGastos]=useState(() => parseGastos(pinnedValues));
@@ -630,15 +615,33 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   const ingresoNecesarioARS=(totalGastosUSD+targetGanancia)*tc;
 
   async function saveGastos() {
-    await pinValue("gastos", gastos);
-    await pinValue("targetGanancia", targetGanancia);
-    setGastosSaved(true);
-    setTimeout(()=>setGastosSaved(false), 2000);
+    try {
+      // Clean gastos - simple array with only nombre and monto
+      const cleanGastos = gastos.map((g, i) => ({
+        id: i + 1,
+        nombre: String(g.nombre || ""),
+        monto: Number(g.monto || 0),
+      }));
+      const gastosStr = JSON.stringify(cleanGastos);
+      const updated = {
+        ...pinnedValues,
+        gastos: gastosStr,
+        targetGanancia: Number(targetGanancia),
+      };
+      setPinnedValues(updated);
+      await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+      setGastosSaved(true);
+      setTimeout(()=>setGastosSaved(false), 2500);
+    } catch(e) {
+      console.error("saveGastos error:", e);
+      alert("Error al guardar gastos: " + e.message);
+    }
   }
 
   function agregarGasto() {
     if(!nuevoNombre||!nuevoMonto) return;
-    setGastos([...gastos,{id:Date.now(),nombre:nuevoNombre,monto:Number(nuevoMonto)}]);
+    const newId = gastos.length + 1;
+    setGastos([...gastos, {id: newId, nombre: String(nuevoNombre), monto: Number(nuevoMonto)}]);
     setNuevoNombre(""); setNuevoMonto("");
     setGastosSaved(false);
   }
