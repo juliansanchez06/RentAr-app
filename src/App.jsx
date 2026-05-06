@@ -1708,8 +1708,18 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
     return m;
   },[bookings,propId]);
 
-  const nights=form.checkIn&&form.checkOut?Math.max(0,Math.round((new Date(form.checkOut)-new Date(form.checkIn))/86400000)):0;
-  const pricing=nights>0?calcPricing(nights,70000,15000,commPct):null;
+  const nights       = form.checkIn&&form.checkOut?Math.max(0,Math.round((new Date(form.checkOut)-new Date(form.checkIn))/86400000)):0;
+  const minNightsVal = pinnedValues?.minNights||2;
+  const tarifaBaseV  = pinnedValues?.tarifaBase||70000;
+  const desc2PersV   = pinnedValues?.desc2Pers||10;
+  const desc1PersV   = pinnedValues?.desc1Pers||20;
+  const tarifaPersonas = form.personas===1
+    ? Math.round(tarifaBaseV*(1-desc1PersV/100))
+    : form.personas===2
+    ? Math.round(tarifaBaseV*(1-desc2PersV/100))
+    : tarifaBaseV;
+  const pricing  = nights>0?calcPricing(nights,tarifaPersonas,15000,commPct,minNightsVal):null;
+  const belowMin = nights>0&&nights<minNightsVal;
 
   const PLATAFORMAS=[
     {key:"direct",  label:"Directa",  pct:0},
