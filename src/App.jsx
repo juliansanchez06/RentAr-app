@@ -67,10 +67,16 @@ function calcPricing(nights, base, clean, commPct=0, minNights=2) {
   } else if (nights >= 30) {
     rate = base * 0.75;
     label = "−25% estadía mensual";
-  } else if (nights >= 7) {
+  } else if (nights === 21) {
+    rate = base * 0.8;
+    label = "−20% descuento 3 semanas";
+  } else if (nights === 14) {
+    rate = base * 0.85;
+    label = "−15% descuento 2 semanas";
+  } else if (nights === 7) {
     rate = base * 0.9;
     label = "−10% descuento semanal";
-  } else if (nights >= 3) {
+  } else {
     label = "Precio estándar";
   }
 
@@ -973,12 +979,14 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
 
   // Política de precios según noches
   function pricingMultiplier(noches) {
-    if (noches < minNights) return { mult:1.5, tag:"⚠ Bajo mínimo", color:C.red, available:false };
-    if (noches === 1)        return { mult:1.5, tag:"+50%",          color:C.red, available:false };
-    if (noches === 2)        return { mult:1.2, tag:"+20%",          color:C.yellow, available:true };
-    if (noches >= 30)        return { mult:0.75, tag:"−25% mensual", color:C.blue, available:true };
-    if (noches >= 7)         return { mult:0.9, tag:"−10% semanal",  color:C.green, available:true };
-    return { mult:1.0, tag:"Estándar", color:C.text, available:true };
+    if (noches < minNights) return { mult:1.5, tag:"⚠ Bajo mínimo", color:C.red,    available:false };
+    if (noches === 1)        return { mult:1.5, tag:"+50%",           color:C.red,    available:false };
+    if (noches === 2)        return { mult:1.2, tag:"+20%",           color:C.yellow, available:true };
+    if (noches >= 30)        return { mult:0.75,tag:"−25% mensual",   color:C.blue,   available:true };
+    if (noches === 7)        return { mult:0.9, tag:"−10% 7 noches",  color:C.green,  available:true };
+    if (noches === 14)       return { mult:0.85,tag:"−15% 2 semanas", color:C.green,  available:true };
+    if (noches === 21)       return { mult:0.8, tag:"−20% 3 semanas", color:C.green,  available:true };
+    return { mult:1.0, tag:"Estándar", color:C.textSec, available:true };
   }
 
   const escenarios=[1,2,3,5,7,10,12,15,20,25].map(noches=>{
