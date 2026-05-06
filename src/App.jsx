@@ -1912,6 +1912,87 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   const pricing  = nights>0?calcPricing(nights,tarifaPersonas,15000,commPct,minNightsVal):null;
   const belowMin = nights>0&&nights<minNightsVal;
 
+  // Opciones de precio pre-simuladas del Punto de Equilibrio
+  const opcionesPrecios = useMemo(()=>{
+    if (!nights || nights < 1) return [];
+    const opts = [];
+    const cleanCost = 5000 * nights; // costo limpieza interno
+
+    // Opción 1: precio calculado automático (base)
+    if (pricing && !belowMin) {
+      opts.push({
+        idx:0, label:"Precio sugerido", sublabel:"Basado en tu tarifa configurada",
+        precioNoche: pricing.perNight,
+        totalHuesped: pricing.total,
+        netoVos: pricing.netoReal,
+        color: C.blue, bg: C.blueLight, tag:"⭐ Recomendado",
+      });
+    }
+
+    // Opción 2: precio mínimo para cubrir gastos + meta
+    const gastosUSD = pinnedValues?.gastos
+      ? (() => { try { const g=JSON.parse(pinnedValues.gastos); return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0); } catch{return 56;} })()
+      : 56;
+    const metaUSD = pinnedValues?.targetGanancia || 200;
+    const totalNecARS = (gastosUSD + metaUSD) * tc;
+    const precioMinNoche = Math.ceil(totalNecARS / 20 / 1000) * 1000; // asume 20 noches/mes
+    if (precioMinNoche > 0 && precioMinNoche !== pricing?.perNight) {
+      const totalMin = precioMinNoche * nights;
+      const comMin = Math.round(totalMin * commPct / 100);
+      const netoMin = totalMin - comMin - cleanCost;
+      opts.push({
+        idx:1, label:"Precio mínimo rentable", sublabel:`Para cubrir gastos + meta USD ${metaUSD}/mes`,
+        precioNoche: precioMinNoche,
+        totalHuesped: totalMin,
+        netoVos: netoMin,
+        color: C.green, bg: C.greenLight, tag:"💚 Punto equilibrio",
+      });
+    }
+
+    // Opción 3: precio con descuento para llenar más noches
+    const precioDesc = Math.round((pricing?.perNight || tarifaPersonas) * 0.85);
+    if (precioDesc !== pricing?.perNight) {
+      const totalDesc = precioDesc * nights;
+      const comDesc = Math.round(totalDesc * commPct / 100);
+      const netoDesc = totalDesc - comDesc - cleanCost;
+      opts.push({
+        idx:2, label:"Precio con descuento −15%", sublabel:"Para aumentar ocupación",
+        precioNoche: precioDesc,
+        totalHuesped: totalDesc,
+        netoVos: netoDesc,
+        color: C.yellow, bg: C.yellowLight, tag:"🎯 Mayor ocupación",
+      });
+    }
+
+    // Opción 4: precio premium +20%
+    const precioPrem = Math.round((pricing?.perNight || tarifaPersonas) * 1.2);
+    if (precioPrem !== pricing?.perNight) {
+      const totalPrem = precioPrem * nights;
+      const comPrem = Math.round(totalPrem * commPct / 100);
+      const netoPrem = totalPrem - comPrem - cleanCost;
+      opts.push({
+        idx:3, label:"Precio premium +20%", sublabel:"Temporada alta o fechas especiales",
+        precioNoche: precioPrem,
+        totalHuesped: totalPrem,
+        netoVos: netoPrem,
+        color: "#7c3aed", bg: "#ede9fe", tag:"🔥 Premium",
+      });
+    }
+
+    return opts;
+  }, [nights, tarifaPersonas, commPct, tc, pinnedValues, belowMin]);
+
+  // Precio final efectivo (manual > seleccionado > calculado)
+  const precioFinalNoche = precioManual
+    ? Number(precioManual)
+    : precioSelIdx >= 0 && opcionesPrecios[precioSelIdx]
+    ? opcionesPrecios[precioSelIdx].precioNoche
+    : pricing?.perNight || 0;
+
+  const totalFinalHuesped = precioFinalNoche * nights;
+  const comisionFinal = Math.round(totalFinalHuesped * commPct / 100);
+  const netoFinal = totalFinalHuesped - comisionFinal - (5000 * nights);
+
   const PLATAFORMAS=[
     {key:"direct",  label:"Directa",  pct:0},
     {key:"airbnb",  label:"Airbnb",   pct:15},
@@ -1937,10 +2018,11 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
         basePricePerNight:tarifaPersonas,
         tarifaPersonasDesc: form.personas===1?desc1PersV:form.personas===2?desc2PersV:0,
         cleaningFee:15000,commissionPct:commPct,
-        totalARS:pricing?.total||0,
-        totalNetoARS:pricing?.neto||0,
-        comisionARS:pricing?.comision||0,
-        totalUSD:pricing?arsToUsd(pricing.neto,tc):0,
+        totalARS:totalFinalHuesped||0,
+        totalNetoARS:netoFinal||0,
+        comisionARS:comisionFinal||0,
+        totalUSD:arsToUsd(netoFinal,tc)||0,
+        precioNocheUsado:precioFinalNoche,
         exchangeRateUsed:tc,
         createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
       });
@@ -2082,7 +2164,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
             }}>
               <div>
                 <div style={{fontSize:18,fontWeight:800,color:"#fff"}}>Nueva reserva</div>
-                <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:2}}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:2}}>{shortProps[0]?.name||"Depto 2 · Renta Temporal"}</div>
               </div>
               <button onClick={()=>setShowForm(false)} style={{
                 background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",
@@ -2174,98 +2256,125 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                 </div>
               </div>
 
-              {/* Col derecha - resumen */}
+              {/* Col derecha - selector de precios */}
               <div className="booking-modal-col-right" style={{padding:"20px 24px",background:C.bg,display:"flex",flexDirection:"column",gap:12}}>
-                <div style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:"1px"}}>Resumen de precio</div>
+                <div style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:"1px"}}>Elegí el precio</div>
 
                 {nights===0?(
                   <div style={{background:C.white,borderRadius:12,padding:"30px",textAlign:"center",border:"1px solid "+C.border,color:C.textMuted,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
                     <div style={{fontSize:32}}>📅</div>
-                    <div style={{fontSize:13}}>Seleccioná las fechas para ver el precio</div>
+                    <div style={{fontSize:13}}>Seleccioná las fechas para ver opciones de precio</div>
+                  </div>
+                ):belowMin?(
+                  <div style={{background:C.redLight,borderRadius:12,padding:"20px",border:"1px solid "+C.red,textAlign:"center"}}>
+                    <div style={{fontSize:20,marginBottom:8}}>⚠</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.red}}>Mínimo {minNightsVal} noches</div>
+                    <div style={{fontSize:12,color:C.red,marginTop:4}}>Ajustá las fechas para continuar</div>
                   </div>
                 ):(
                   <>
-                    {/* Noches */}
-                    <div style={{background:C.white,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <span style={{fontSize:15,fontWeight:700}}>{nights} {nights===1?"noche":"noches"}</span>
-                        <span style={{
-                          fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
-                          background:belowMin?C.redLight:C.greenLight,
-                          color:belowMin?C.red:C.green,
-                        }}>
-                          {belowMin?`⚠ Mín. ${minNightsVal}n`:"✓ OK"}
-                        </span>
-                      </div>
-                      {pricing&&<div style={{fontSize:12,color:C.textSec,marginTop:4}}>{pricing.label}</div>}
+                    {/* Resumen noches + personas */}
+                    <div style={{background:C.white,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:13,fontWeight:600}}>{nights}n · {form.personas} {form.personas===1?"persona":"personas"}</span>
+                      <span style={{fontSize:11,background:C.greenLight,color:C.green,padding:"3px 8px",borderRadius:20,fontWeight:600}}>✓ OK</span>
                     </div>
 
-                    {/* Descuento personas */}
-                    {form.personas<3&&(
-                      <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.yellow+"44"}}>
-                        <div style={{fontSize:11,color:C.yellow,fontWeight:700}}>Descuento grupo · {form.personas===1?"1 persona":"2 personas"}</div>
-                        <div style={{fontSize:14,fontWeight:700,marginTop:2}}>{fARS(tarifaPersonas)}/noche</div>
-                        <div style={{fontSize:11,color:C.yellow}}>−{form.personas===1?desc1PersV:desc2PersV}% sobre tarifa base</div>
-                      </div>
-                    )}
-
-                    {/* Precio huésped */}
-                    {pricing&&!belowMin&&(
-                      <>
-                        <div style={{background:C.white,borderRadius:12,padding:"14px",border:"1px solid "+C.border}}>
-                          <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Lo que paga el huésped</div>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                    {/* Opciones pre-simuladas */}
+                    <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>Precios del Punto de Equilibrio</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {opcionesPrecios.map(opt=>(
+                        <div key={opt.idx} onClick={()=>{setPrecioSelIdx(opt.idx);setPrecioManual("");}}
+                          style={{
+                            borderRadius:12,padding:"12px 14px",cursor:"pointer",
+                            border:"2px solid "+(precioSelIdx===opt.idx?opt.color:C.border),
+                            background:precioSelIdx===opt.idx?opt.bg:C.white,
+                            transition:"all 0.15s",
+                          }}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                             <div>
-                              <div style={{fontSize:26,fontWeight:900}}>{fARS(pricing.total)}</div>
-                              <div style={{fontSize:12,color:C.textSec}}>{fARS(pricing.perNight)}/n × {nights}n</div>
+                              <div style={{fontSize:13,fontWeight:700,color:precioSelIdx===opt.idx?opt.color:C.text}}>{opt.label}</div>
+                              <div style={{fontSize:11,color:C.textMuted}}>{opt.sublabel}</div>
                             </div>
-                            <div style={{fontSize:15,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(pricing.total,tc))}</div>
+                            <span style={{fontSize:10,background:opt.bg,color:opt.color,padding:"2px 8px",borderRadius:20,fontWeight:700,flexShrink:0,marginLeft:8}}>{opt.tag}</span>
                           </div>
-                          {pricing.comision>0&&(
-                            <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 0",marginTop:8,borderTop:"1px solid "+C.border,fontSize:12,color:C.red}}>
-                              <span>Comisión {commPct}%</span>
-                              <span>−{fARS(pricing.comision)}</span>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <div>
+                              <span style={{fontSize:16,fontWeight:800,color:opt.color}}>{fARS(opt.precioNoche)}</span>
+                              <span style={{fontSize:11,color:C.textMuted}}>/noche</span>
                             </div>
+                            <div style={{textAlign:"right"}}>
+                              <div style={{fontSize:13,fontWeight:700}}>Total: {fARS(opt.totalHuesped)}</div>
+                              <div style={{fontSize:11,color:C.green}}>Recibís: {fARS(opt.netoVos)} · {fUSD(arsToUsd(opt.netoVos,tc))}</div>
+                            </div>
+                          </div>
+                          {precioSelIdx===opt.idx&&(
+                            <div style={{marginTop:6,fontSize:11,color:opt.color,fontWeight:600}}>✓ Precio seleccionado</div>
                           )}
                         </div>
+                      ))}
+                    </div>
 
-                        <div style={{background:"linear-gradient(135deg,#d1fae5,#a7f3d0)",borderRadius:12,padding:"14px",border:"1px solid "+C.green}}>
-                          <div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Lo que recibís vos</div>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
-                            <div>
-                              <div style={{fontSize:26,fontWeight:900,color:C.green}}>{fARS(pricing.netoReal)}</div>
-                              <div style={{fontSize:12,color:"#065f46"}}>Neto final</div>
-                            </div>
-                            <div style={{fontSize:15,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(pricing.netoReal,tc))}</div>
-                          </div>
-                          <div style={{fontSize:11,color:"#065f46",marginTop:8,display:"flex",flexDirection:"column",gap:2}}>
-                            {pricing.comision>0&&<span>−{fARS(pricing.comision)} comisión plataforma</span>}
-                            <span>−{fARS(pricing.costoLimpieza)} costo limpieza</span>
-                          </div>
+                    {/* Precio manual */}
+                    <div style={{background:C.white,borderRadius:12,padding:"12px 14px",border:"2px solid "+(precioManual?C.text:C.border)}}>
+                      <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>✏ O ingresá un precio manual</div>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:14,color:C.textMuted,fontWeight:600}}>$</span>
+                        <input type="number" value={precioManual}
+                          onChange={e=>{setPrecioManual(e.target.value);setPrecioSelIdx(-1);}}
+                          placeholder={String(pricing?.perNight||70000)}
+                          style={{...S.input,fontSize:16,fontWeight:700}}/>
+                        <span style={{fontSize:12,color:C.textMuted,whiteSpace:"nowrap"}}>/noche</span>
+                      </div>
+                      {precioManual>0&&(
+                        <div style={{marginTop:6,fontSize:12,color:C.textSec}}>
+                          Total: <strong>{fARS(totalFinalHuesped)}</strong> · Recibís: <strong style={{color:C.green}}>{fARS(netoFinal)} ({fUSD(arsToUsd(netoFinal,tc))})</strong>
                         </div>
-                      </>
-                    )}
+                      )}
+                    </div>
 
-                    {belowMin&&(
-                      <div style={{background:C.redLight,borderRadius:12,padding:"14px",border:"1px solid "+C.red}}>
-                        <div style={{fontSize:13,fontWeight:700,color:C.red}}>⚠ Bajo el mínimo</div>
-                        <div style={{fontSize:12,color:C.red,marginTop:4}}>Mínimo {minNightsVal} noches requeridas. Ajustá las fechas.</div>
+                    {/* Resumen final */}
+                    {(precioSelIdx>=0||precioManual)&&(
+                      <div style={{background:"linear-gradient(135deg,#d1fae5,#a7f3d0)",borderRadius:12,padding:"14px",border:"1px solid "+C.green}}>
+                        <div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Resumen final</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                          <div>
+                            <div style={{fontSize:22,fontWeight:900}}>{fARS(totalFinalHuesped)}</div>
+                            <div style={{fontSize:11,color:"#065f46"}}>{fARS(precioFinalNoche)}/n × {nights}n · huésped paga</div>
+                          </div>
+                          <div style={{fontSize:14,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(totalFinalHuesped,tc))}</div>
+                        </div>
+                        <div style={{borderTop:"1px solid rgba(5,150,105,0.3)",paddingTop:8,display:"flex",justifyContent:"space-between"}}>
+                          <div>
+                            <div style={{fontSize:16,fontWeight:800,color:C.green}}>{fARS(netoFinal)}</div>
+                            <div style={{fontSize:10,color:"#065f46"}}>Recibís vos (neto)</div>
+                          </div>
+                          <div style={{fontSize:13,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(netoFinal,tc))}</div>
+                        </div>
+                        {(comisionFinal>0||nights>0)&&(
+                          <div style={{fontSize:10,color:"#065f46",marginTop:6,display:"flex",flexDirection:"column",gap:1}}>
+                            {comisionFinal>0&&<span>−{fARS(comisionFinal)} comisión {form.source}</span>}
+                            <span>−{fARS(5000*nights)} costo limpieza interno</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
                 )}
 
-                {/* Botones fijos abajo */}
+                {/* Botones */}
                 <div style={{marginTop:"auto",display:"flex",gap:10,paddingTop:12}}>
-                  <button onClick={save} disabled={saving} style={{
+                  <button onClick={save} disabled={saving||(nights>0&&!belowMin&&precioSelIdx<0&&!precioManual)} style={{
                     flex:1,padding:"13px 0",border:"none",borderRadius:10,cursor:"pointer",
-                    background:"linear-gradient(135deg,#059669,#10b981)",
-                    color:"#fff",fontSize:14,fontWeight:700,
-                    boxShadow:"0 4px 14px rgba(5,150,105,0.3)",
+                    background:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)
+                      ?"linear-gradient(135deg,#059669,#10b981)"
+                      :C.border,
+                    color:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"#fff":C.textMuted,
+                    fontSize:14,fontWeight:700,
+                    boxShadow:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"0 4px 14px rgba(5,150,105,0.3)":"none",
                   }}>
-                    {saving?"Guardando...":"✓ Guardar reserva"}
+                    {saving?"Guardando...":nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"✓ Guardar reserva":"Elegí un precio →"}
                   </button>
-                  <button onClick={()=>setShowForm(false)} style={{...S.btnSec,padding:"13px 16px"}}>Cancelar</button>
+                  <button onClick={()=>{setShowForm(false);setPrecioSelIdx(-1);setPrecioManual("");}} style={{...S.btnSec,padding:"13px 16px"}}>Cancelar</button>
                 </div>
               </div>
             </div>
@@ -3029,7 +3138,7 @@ function Accesos({ properties, bookings, tc, db }) {
             <div style={{fontSize:40}}>{st.icon}</div>
             <div>
               <div style={{fontSize:20,fontWeight:800,color:st.color}}>{st.label}</div>
-              <div style={{fontSize:12,color:C.textMuted}}>{d2?.name||"Depto 2"}</div>
+              <div style={{fontSize:12,color:C.textMuted}}>{properties.find(p=>p.type==="short_term"||p.type==="temporal")?.name||"Depto 2"}</div>
             </div>
           </div>
           <button onClick={getLockStatus} disabled={loadingAction==="status"} style={{
