@@ -1911,14 +1911,6 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
     : form.personas===2
     ? Math.round(tarifaBaseV*(1-desc2PersV/100))
     : tarifaBaseV;
-  const tarifaBaseV  = pinnedValues?.tarifaBase||70000;
-  const desc2PersV   = pinnedValues?.desc2Pers||10;
-  const desc1PersV   = pinnedValues?.desc1Pers||20;
-  const tarifaPersonas = form.personas===1
-    ? Math.round(tarifaBaseV*(1-desc1PersV/100))
-    : form.personas===2
-    ? Math.round(tarifaBaseV*(1-desc2PersV/100))
-    : tarifaBaseV;
   const pricing  = nights>0?calcPricing(nights,tarifaPersonas,15000,commPct,minNightsVal):null;
   const belowMin = nights>0&&nights<minNightsVal;
 
