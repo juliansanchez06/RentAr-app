@@ -1266,6 +1266,158 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         </div>
       </div>
 
+      {/* ── MATRIZ DE PRECIOS ──────────────────────────────────────────────── */}
+      <div style={{...S.card,marginTop:16,borderTop:"3px solid "+C.blue}}>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:4}}>🧮 Simulador de precio</div>
+          <div style={{fontSize:18,fontWeight:800,letterSpacing:"-0.5px"}}>Matriz personas × noches</div>
+          <div style={{fontSize:12,color:C.textSec,marginTop:4}}>
+            Precio por noche según grupo y duración · Gastos fijos: {fUSD(totalGastosUSD)}/mes · Meta: {fUSD(targetGanancia)}/mes
+          </div>
+        </div>
+
+        {/* Tabla matriz */}
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{borderBottom:"2px solid "+C.border}}>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",background:C.bg,borderRadius:"8px 0 0 0",minWidth:120}}>
+                  Personas / Noches
+                </th>
+                {[1,2,3,5,7,10,14].map(n=>{
+                  const pm = pricingMultiplier(n);
+                  return (
+                    <th key={n} style={{
+                      padding:"10px 10px",textAlign:"center",
+                      fontSize:11,fontWeight:700,
+                      background:!pm.available?C.redLight:n===7||n===14?C.greenLight:C.bg,
+                      color:!pm.available?C.red:n===7||n===14?C.green:C.textSec,
+                      borderLeft:"1px solid "+C.border,
+                      minWidth:100,
+                    }}>
+                      <div>{n} {n===1?"noche":"noches"}</div>
+                      <div style={{fontSize:10,fontWeight:600,color:pm.color}}>{pm.tag}</div>
+                      {!pm.available&&<div style={{fontSize:9,color:C.red}}>⚠ bajo mínimo</div>}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {personas:3, label:"👤👤👤 3 personas", descPct:0},
+                {personas:2, label:"👤👤 2 personas",   descPct:desc2Pers},
+                {personas:1, label:"👤 1 persona",      descPct:desc1Pers},
+              ].map(({personas,label,descPct},ri)=>{
+                // Tarifa base según personas
+                const tarifaPers = personas===1
+                  ? Math.round(tarifaBase*(1-desc1Pers/100))
+                  : personas===2
+                  ? Math.round(tarifaBase*(1-desc2Pers/100))
+                  : tarifaBase;
+
+                return (
+                  <tr key={personas} style={{borderBottom:"1px solid "+C.border,background:ri%2===0?C.bg:C.white}}>
+                    <td style={{padding:"12px 14px",fontWeight:700}}>
+                      <div>{label}</div>
+                      {descPct>0&&<div style={{fontSize:10,color:C.yellow,fontWeight:600}}>−{descPct}% desc. grupo</div>}
+                      <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{fARS(tarifaPers)}/n base</div>
+                    </td>
+                    {[1,2,3,5,7,10,14].map(noches=>{
+                      const pm = pricingMultiplier(noches);
+                      // Precio con multiplicador de noches aplicado sobre tarifa de personas
+                      const precioNoche = Math.round(tarifaPers * pm.mult);
+                      const cleanFee    = 15000;
+                      const bruto       = precioNoche * noches + cleanFee;
+                      const comision    = Math.round(bruto * commPct / 100);
+                      const neto        = bruto - comision;
+                      const netoUSD     = arsToUsd(neto, tc);
+                      const gastosUSD   = totalGastosUSD;
+
+                      // ¿Cuántas reservas de este tipo necesito para cubrir gastos + meta?
+                      const reservasNecesarias = netoUSD > 0
+                        ? Math.ceil((gastosUSD + targetGanancia) / netoUSD)
+                        : null;
+                      const nochesNecesarias = reservasNecesarias ? reservasNecesarias * noches : null;
+                      const cubre = netoUSD >= (gastosUSD + targetGanancia);
+                      const parcial = !cubre && netoUSD > gastosUSD;
+
+                      return (
+                        <td key={noches} style={{
+                          padding:"10px 10px",textAlign:"center",
+                          borderLeft:"1px solid "+C.border,
+                          background:!pm.available?"#fff5f5":cubre?C.greenLight:parcial?C.yellowLight:"transparent",
+                          opacity:!pm.available?0.5:1,
+                        }}>
+                          {!pm.available?(
+                            <div style={{color:C.red,fontSize:12}}>—</div>
+                          ):(
+                            <>
+                              {/* Precio por noche */}
+                              <div style={{fontSize:14,fontWeight:800,color:C.text}}>{fARS(precioNoche)}</div>
+                              <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>/noche</div>
+
+                              {/* Total de la estadía */}
+                              <div style={{fontSize:11,fontWeight:600,color:C.blue}}>
+                                {fARS(neto)} neto
+                              </div>
+                              {commPct>0&&<div style={{fontSize:9,color:C.red}}>−{fARS(comision)} com.</div>}
+                              <div style={{fontSize:10,color:C.textMuted}}>{fUSD(netoUSD)}</div>
+
+                              {/* Cuántas reservas necesito */}
+                              <div style={{
+                                marginTop:6,padding:"3px 6px",borderRadius:6,
+                                background:cubre?C.green:parcial?C.yellow:C.textMuted,
+                                color:"#fff",fontSize:9,fontWeight:700,
+                              }}>
+                                {cubre
+                                  ? "✓ 1 reserva = meta"
+                                  : reservasNecesarias
+                                  ? `${reservasNecesarias}× = ${nochesNecesarias}n/mes`
+                                  : "No alcanza"}
+                              </div>
+                            </>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Leyenda */}
+        <div style={{display:"flex",gap:16,marginTop:14,flexWrap:"wrap"}}>
+          {[
+            {color:C.green,  bg:C.greenLight,  label:"1 reserva cubre gastos + meta"},
+            {color:C.yellow, bg:C.yellowLight, label:"Cubre gastos, no la meta completa"},
+            {color:C.textMuted,bg:"transparent",border:C.border, label:"No cubre gastos"},
+            {color:C.red,    bg:"#fff5f5",     label:"Bajo mínimo de noches"},
+          ].map(({color,bg,border,label})=>(
+            <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:12,height:12,borderRadius:3,background:bg,border:"1px solid "+(border||color)}}/>
+              <span style={{fontSize:11,color:C.textSec}}>{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Insight automático */}
+        <div style={{marginTop:14,background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:12,padding:"14px 18px"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#fff",marginBottom:6}}>📊 Insight del simulador</div>
+          <div style={{fontSize:13,color:"rgba(255,255,255,0.85)",lineHeight:1.7}}>
+            Con <strong style={{color:"#60a5fa"}}>3 personas y {minNights===1?"1 noche":minNights+" noches"}</strong> tu precio mínimo es{" "}
+            <strong style={{color:"#34d399"}}>{fARS(Math.round(tarifaBase * pricingMultiplier(minNights).mult))}/noche</strong>.
+            Para cubrir tus gastos de {fUSD(totalGastosUSD)}/mes y ganar {fUSD(targetGanancia)}/mes necesitás al menos{" "}
+            <strong style={{color:"#fbbf24"}}>
+              {Math.ceil((totalGastosUSD+targetGanancia)/arsToUsd(Math.round(tarifaBase*pricingMultiplier(Math.max(minNights,2)).mult)*Math.max(minNights,2)+15000,tc))} reservas de {Math.max(minNights,2)} noches
+            </strong>{" "}con el depto lleno.
+            {commPct>0&&<span> Recordá el {commPct}% de comisión de {platform==="airbnb"?"Airbnb":"Booking"}.</span>}
+          </div>
+        </div>
+      </div>
+
       {/* ── EVALUACIÓN DE NUEVA PROPIEDAD ────────────────────────────────── */}
       <div style={{...S.card,marginTop:16,borderTop:"3px solid "+C.blue}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
