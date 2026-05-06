@@ -2455,6 +2455,197 @@ function Movimientos({ db }) {
   );
 }
 
+// ── TRANSACCIONES ────────────────────────────────────────────────────────────
+function Transactions({ properties, transactions, tc, reload, db }) {
+  const [showForm,setShowForm] = useState(false);
+  const [saving,setSaving]     = useState(false);
+  const [filterType,setFilterType] = useState("all");
+  const [filterProp,setFilterProp] = useState("all");
+  const [form,setForm] = useState({
+    propertyId:"", type:"income", category:"rent",
+    description:"", date:new Date().toISOString().split("T")[0],
+    amountARS:0,
+  });
+
+  function setF(f,v){ setForm(p=>({...p,[f]:v})); }
+
+  const filtered = transactions.filter(t=>
+    (filterType==="all"||t.type===filterType) &&
+    (filterProp==="all"||t.propertyId===filterProp)
+  );
+
+  const totalIncome  = filtered.filter(t=>t.type==="income").reduce((s,t)=>s+t.amountUSD,0);
+  const totalExpense = filtered.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amountUSD,0);
+  const net          = totalIncome - totalExpense;
+
+  async function save() {
+    if (!form.description||!form.amountARS){ alert("Completá descripción y monto"); return; }
+    setSaving(true);
+    try {
+      const ars = Number(form.amountARS);
+      await addDoc(collection(db,"re_transactions"),{
+        ...form,
+        amountARS: ars,
+        amountUSD: arsToUsd(ars,tc),
+        exchangeRateUsed: tc,
+        createdAt: new Date().toISOString(),
+      });
+      await reload();
+      setShowForm(false);
+      setForm({propertyId:"",type:"income",category:"rent",description:"",date:new Date().toISOString().split("T")[0],amountARS:0});
+    } catch(e){ alert("Error: "+e.message); }
+    finally { setSaving(false); }
+  }
+
+  const CATS = ["rent","services","maintenance","cleaning","taxes","insurance","other"];
+
+  return (
+    <div style={{animation:"fadeIn 0.25s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>💳 Ingresos y egresos</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Transacciones</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{transactions.length} registros · ARS convertido a USD</p>
+        </div>
+        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#059669,#10b981)",boxShadow:"0 4px 14px rgba(5,150,105,0.3)"}}>
+          + Nueva transacción
+        </button>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:20}}>
+        {[
+          {label:"Ingresos",  value:fUSD(totalIncome),  color:C.green},
+          {label:"Egresos",   value:fUSD(totalExpense), color:C.red},
+          {label:"Neto",      value:fUSD(net),          color:net>=0?C.green:C.red},
+        ].map(({label,value,color})=>(
+          <div key={label} style={S.card}>
+            <div style={{fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",marginBottom:8,textTransform:"uppercase"}}>{label}</div>
+            <div style={{fontSize:22,fontWeight:800,color}}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+        <select style={{...S.input,width:"auto"}} value={filterType} onChange={e=>setFilterType(e.target.value)}>
+          <option value="all">Todos</option>
+          <option value="income">Ingresos</option>
+          <option value="expense">Egresos</option>
+        </select>
+        <select style={{...S.input,width:"auto"}} value={filterProp} onChange={e=>setFilterProp(e.target.value)}>
+          <option value="all">Todas las propiedades</option>
+          {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+
+      {/* Lista */}
+      <div style={{...S.card,padding:0,overflow:"hidden",overflowX:"auto"}}>
+        {filtered.length===0?(
+          <div style={{textAlign:"center",padding:"60px 0",color:C.textMuted}}>
+            <div style={{fontSize:32,marginBottom:8}}>💳</div>
+            <div>No hay transacciones registradas</div>
+          </div>
+        ):(
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead style={{background:C.bg}}>
+              <tr style={{borderBottom:"1px solid "+C.border}}>
+                {["Fecha","Propiedad","Descripción","Categoría","ARS","USD","Tipo"].map(h=>(
+                  <th key={h} style={{padding:"10px 16px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t,i)=>(
+                <tr key={t.id} style={{borderBottom:"1px solid "+C.border,background:i%2===0?"transparent":C.bg}}>
+                  <td style={{padding:"12px 16px",color:C.textSec,whiteSpace:"nowrap"}}>{t.date}</td>
+                  <td style={{padding:"12px 16px"}}>{properties.find(p=>p.id===t.propertyId)?.name||"—"}</td>
+                  <td style={{padding:"12px 16px",fontWeight:500}}>{t.description}</td>
+                  <td style={{padding:"12px 16px",color:C.textMuted,textTransform:"capitalize"}}>{t.category||"—"}</td>
+                  <td style={{padding:"12px 16px",fontWeight:600,color:t.type==="income"?C.green:C.red}}>
+                    {t.type==="income"?"+":"−"}{fARS(t.amountARS)}
+                  </td>
+                  <td style={{padding:"12px 16px",fontWeight:600,color:t.type==="income"?C.green:C.red}}>
+                    {t.type==="income"?"+":"−"}{fUSD(t.amountUSD)}
+                  </td>
+                  <td style={{padding:"12px 16px"}}>
+                    <span style={{
+                      fontSize:11,padding:"3px 10px",borderRadius:20,fontWeight:600,
+                      background:t.type==="income"?C.greenLight:C.redLight,
+                      color:t.type==="income"?C.green:C.red,
+                    }}>{t.type==="income"?"Ingreso":"Egreso"}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Modal nueva transacción */}
+      {showForm&&(
+        <div style={S.modal}>
+          <div className="modal-box" style={S.modalBox}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
+              <div style={{fontSize:18,fontWeight:700}}>Nueva transacción</div>
+              <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",fontSize:22,color:C.textSec,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={S.label}>Tipo</label>
+                  <select style={S.input} value={form.type} onChange={e=>setF("type",e.target.value)}>
+                    <option value="income">Ingreso</option>
+                    <option value="expense">Egreso</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Fecha</label>
+                  <input type="date" style={S.input} value={form.date} onChange={e=>setF("date",e.target.value)}/>
+                </div>
+              </div>
+              <div>
+                <label style={S.label}>Propiedad</label>
+                <select style={S.input} value={form.propertyId} onChange={e=>setF("propertyId",e.target.value)}>
+                  <option value="">Seleccioná una propiedad</option>
+                  {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={S.label}>Descripción</label>
+                <input style={S.input} value={form.description} onChange={e=>setF("description",e.target.value)} placeholder="Ej: Alquiler mayo 2026"/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={S.label}>Categoría</label>
+                  <select style={S.input} value={form.category} onChange={e=>setF("category",e.target.value)}>
+                    {CATS.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Monto (ARS)</label>
+                  <input type="number" style={S.input} value={form.amountARS} onChange={e=>setF("amountARS",e.target.value)}/>
+                </div>
+              </div>
+              {form.amountARS>0&&(
+                <div style={{background:C.greenLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.green}}>
+                  ≈ <strong>{fUSD(arsToUsd(Number(form.amountARS),tc))}</strong> al TC ${tc.toLocaleString("es-AR")}
+                </div>
+              )}
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={save} disabled={saving} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>
+                  {saving?"Guardando...":"Guardar transacción"}
+                </button>
+                <button onClick={()=>setShowForm(false)} style={S.btnSec}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ANÁLISIS ──────────────────────────────────────────────────────────────────
 function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
   const [propId,setPropId]       = useState("all");
