@@ -478,16 +478,22 @@ export default function App() {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinValue }) {
-  const [nights,setNights]=useState(pinnedValues?.nights||12);
-  const now=new Date();
-  const d1=properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
-  const d2=properties.find(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
+function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinValue, reload, db }) {
+  const [nights,setNights]       = useState(pinnedValues?.nights||12);
+  const [showCobro,setShowCobro] = useState(false);
+  const [cobroMes,setCobroMes]   = useState(new Date().getMonth());
+  const [cobroAnio,setCobroAnio] = useState(new Date().getFullYear());
+  const [cobroMonto,setCobroMonto] = useState("");
+  const [savingCobro,setSavingCobro] = useState(false);
+  const now = new Date();
+
+  const d1 = properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
+  const d2 = properties.find(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
 
   const txInc1 = transactions.filter(t=>t.propertyId===d1?.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3;
-  const inc1ARS = d1 ? (d1.monthlyIncomeARS || txInc1 || 476670) : 476670;
-  const inc1USD=arsToUsd(inc1ARS,tc), net1USD=inc1USD, val1=d1?.estimatedValueUSD||67000;
-  const cap1=val1>0?(net1USD*12/val1)*100:0, pb1=net1USD>0?val1/(net1USD*12):null;
+  const inc1ARS = d1 ? (d1.monthlyIncomeARS||txInc1||476670) : 476670;
+  const inc1USD = arsToUsd(inc1ARS,tc), net1USD=inc1USD, val1=d1?.estimatedValueUSD||67000;
+  const cap1    = val1>0?(net1USD*12/val1)*100:0, pb1=net1USD>0?val1/(net1USD*12):null;
 
   const inc2ARS=70000*nights, inc2USD=arsToUsd(inc2ARS,tc);
   const exp2ARS=pinnedValues?.gastosMensuales||80000, exp2USD=arsToUsd(exp2ARS,tc);
@@ -499,27 +505,60 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const irr=calcIRR(totalVal,totalNet*12,totalVal,20);
 
   const projection=Array.from({length:20},(_,i)=>({
-    year:i+1, cum:Math.round(-totalVal+totalNet*12*(i+1)),
+    year:i+1,cum:Math.round(-totalVal+totalNet*12*(i+1)),
     recovered:-totalVal+totalNet*12*(i+1)>=0,
   }));
   const pbYear=projection.find(r=>r.recovered)?.year;
   const maxAbs=Math.max(...projection.map(r=>Math.abs(r.cum)),1);
   const recentTxs=transactions.slice(0,6);
+
+  // Cobros de renta fija este año
+  const cobrosAnio = transactions.filter(t=>
+    t.propertyId===d1?.id && t.type==="income" &&
+    t.date?.startsWith(String(now.getFullYear()))
+  );
+  const mesesCobrados = cobrosAnio.map(t=>Number(t.date?.split("-")[1])-1);
+  const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+
+  async function registrarCobro() {
+    if (!d1?.id) { alert("Primero cargá el Depto 1 en Propiedades"); return; }
+    if (!cobroMonto) { alert("Ingresá el monto"); return; }
+    setSavingCobro(true);
+    try {
+      const ars = Number(cobroMonto);
+      const dateStr = `${cobroAnio}-${String(cobroMes+1).padStart(2,"0")}-01`;
+      await addDoc(collection(db,"re_transactions"),{
+        propertyId: d1.id,
+        type: "income",
+        category: "rent",
+        description: `Alquiler ${MESES[cobroMes]} ${cobroAnio}`,
+        date: dateStr,
+        amountARS: ars,
+        amountUSD: arsToUsd(ars,tc),
+        exchangeRateUsed: tc,
+        createdAt: new Date().toISOString(),
+      });
+      await reload();
+      setShowCobro(false);
+      setCobroMonto("");
+    } catch(e) { alert("Error: "+e.message); }
+    finally { setSavingCobro(false); }
+  }
+
   const last6=Array.from({length:6},(_,i)=>{
     const d=new Date(now.getFullYear(),now.getMonth()-(5-i),1);
     const ms=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
     const inc=transactions.filter(t=>t.type==="income"&&t.date?.startsWith(ms)).reduce((s,t)=>s+t.amountUSD,0);
-    return { month:MONTHS_SHORT[d.getMonth()], inc:inc||(i===5?inc1USD+inc2USD:0) };
+    return {month:MESES[d.getMonth()],inc:inc||(i===5?inc1USD+inc2USD:0)};
   });
   const maxBar=Math.max(...last6.map(m=>m.inc),1);
 
   return (
-    <div style={{ animation:"fadeIn 0.25s ease" }}>
+    <div style={{animation:"fadeIn 0.25s ease"}}>
+      {/* Header */}
       <div style={{marginBottom:28,display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>
-            ● Portfolio activo
-          </div>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>● Portfolio activo</div>
           <h1 style={{fontSize:32,fontWeight:900,letterSpacing:"-1px",margin:0,lineHeight:1.1}}>
             {now.getHours()<12?"Buenos días":"Buenas tardes"}{" "}
             <span style={{background:"linear-gradient(135deg,#1e3a6e,#3b82f6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Julian</span> 👋
@@ -536,126 +575,209 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         </div>
       </div>
 
-      <div className="grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
+      {/* KPIs */}
+      <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
-          { label:"Valor del portfolio", value:fUSD(totalVal), sub:`${properties.length} propiedades`, accent:C.text },
-          { label:"Ingreso neto / mes",  value:fUSD(totalNet), sub:`bruto ${fUSD(totalInc)}`,          accent:C.green },
-          { label:"Rentabilidad neta",   value:fPct(netYield), sub:"anual en USD",                     accent:netYield>4?C.green:C.yellow },
-          { label:"TIR estimada",        value:fPct(irr),      sub:"proyección 20 años",               accent:irr>6?C.green:irr>3?C.yellow:C.red },
+          {label:"Valor del portfolio",value:fUSD(totalVal),sub:`${properties.length} propiedades`,accent:C.text},
+          {label:"Ingreso neto / mes", value:fUSD(totalNet),sub:`bruto ${fUSD(totalInc)}`,accent:C.green},
+          {label:"Rentabilidad neta",  value:fPct(netYield),sub:"anual en USD",accent:netYield>4?C.green:C.yellow},
+          {label:"TIR estimada",       value:fPct(irr),     sub:"proyección 20 años",accent:irr>6?C.green:irr>3?C.yellow:C.red},
         ].map(({label,value,sub,accent})=>(
           <div key={label} style={S.card}>
-            <div style={{ fontSize:11, color:C.textMuted, fontWeight:600, letterSpacing:"0.4px", marginBottom:10, textTransform:"uppercase" }}>{label}</div>
-            <div style={{ fontSize:24, fontWeight:800, color:accent, letterSpacing:"-0.5px" }}>{value}</div>
-            <div style={{ fontSize:12, color:C.textMuted, marginTop:4 }}>{sub}</div>
+            <div style={{fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",marginBottom:10,textTransform:"uppercase"}}>{label}</div>
+            <div style={{fontSize:24,fontWeight:800,color:accent,letterSpacing:"-0.5px"}}>{value}</div>
+            <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>{sub}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
-        <div style={{ ...S.card, borderTop:"3px solid "+C.green }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18 }}>
+      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+
+        {/* ── DEPTO 1 ─────────────────────────────────────────────────────── */}
+        <div style={{...S.card,borderTop:"3px solid "+C.green}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
             <div>
-              <div style={{ fontSize:15, fontWeight:700 }}>{d1?.name||"Depto 1 · Renta Fija"}</div>
-              <div style={{ fontSize:12, color:C.textSec, marginTop:2 }}>1 dorm · 2 ambientes grandes · Sin gastos</div>
+              <div style={{fontSize:15,fontWeight:700}}>{d1?.name||"Depto 1 · Renta Fija"}</div>
+              <div style={{fontSize:12,color:C.textSec,marginTop:2}}>1 dorm · 2 ambientes grandes · Sin gastos</div>
             </div>
-            <span style={{ fontSize:11, background:C.greenLight, color:C.green, padding:"3px 10px", borderRadius:20, fontWeight:600 }}>Alquilado</span>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{fontSize:11,background:C.greenLight,color:C.green,padding:"3px 10px",borderRadius:20,fontWeight:600}}>Alquilado</span>
+              <button onClick={()=>setShowCobro(true)} style={{
+                background:"linear-gradient(135deg,#059669,#10b981)",
+                color:"#fff",border:"none",borderRadius:8,
+                padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",
+                boxShadow:"0 2px 8px rgba(5,150,105,0.3)",
+                whiteSpace:"nowrap",
+              }}>💰 Registrar cobro</button>
+            </div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             {[
-              { label:"Ingreso bruto/mes", value:fARS(inc1ARS), sub:fUSD(inc1USD) },
-              { label:"Neto/mes",          value:fUSD(net1USD), color:C.green, sub:"sin gastos" },
-              { label:"Valor propiedad",   value:fUSD(val1) },
-              { label:"Cap Rate",          value:fPct(cap1), color:cap1>4?C.green:C.yellow },
+              {label:"Ingreso bruto/mes",value:fARS(inc1ARS),sub:fUSD(inc1USD)},
+              {label:"Neto/mes",         value:fUSD(net1USD),color:C.green,sub:"sin gastos"},
+              {label:"Valor propiedad",  value:fUSD(val1)},
+              {label:"Cap Rate",         value:fPct(cap1),color:cap1>4?C.green:C.yellow},
             ].map(({label,value,sub,color})=>(
-              <div key={label} style={{ background:C.bg, borderRadius:10, padding:"10px 12px" }}>
-                <div style={{ fontSize:10, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.4px", marginBottom:4, fontWeight:500 }}>{label}</div>
-                <div style={{ fontSize:15, fontWeight:700, color:color||C.text }}>{value}</div>
-                {sub&&<div style={{ fontSize:10, color:C.textMuted, marginTop:2 }}>{sub}</div>}
+              <div key={label} style={{background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+                <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4,fontWeight:500}}>{label}</div>
+                <div style={{fontSize:15,fontWeight:700,color:color||C.text}}>{value}</div>
+                {sub&&<div style={{fontSize:10,color:C.textMuted,marginTop:2}}>{sub}</div>}
               </div>
             ))}
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", background:C.greenLight, borderRadius:10, padding:"10px 14px" }}>
-            <span style={{ fontSize:13, color:C.green, fontWeight:500 }}>Payback</span>
-            <span style={{ fontSize:14, fontWeight:800, color:C.green }}>{pb1?pb1.toFixed(1)+" años":"N/A"}</span>
+
+          {/* Calendario de pagos */}
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,border:"1px solid "+C.border}}>
+            <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Cobros {now.getFullYear()}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4}}>
+              {MESES.map((m,i)=>{
+                const cobrado = mesesCobrados.includes(i);
+                const esMesActual = i===now.getMonth();
+                return (
+                  <div key={m} title={cobrado?`${m}: cobrado`:`${m}: pendiente`} style={{
+                    textAlign:"center",padding:"4px 2px",borderRadius:6,
+                    background:cobrado?C.green:esMesActual?"#fef3c7":"transparent",
+                    border:"1px solid "+(cobrado?C.green:esMesActual?C.yellow:C.border),
+                    cursor:"pointer",
+                  }} onClick={()=>{ setCobroMes(i); setShowCobro(true); }}>
+                    <div style={{fontSize:9,fontWeight:600,color:cobrado?"#fff":esMesActual?C.yellow:C.textMuted}}>{m}</div>
+                    <div style={{fontSize:11}}>{cobrado?"✓":"·"}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:8,height:8,borderRadius:2,background:C.green}}/>
+                <span style={{fontSize:10,color:C.textMuted}}>Cobrado ({mesesCobrados.length})</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:8,height:8,borderRadius:2,background:C.yellowLight,border:"1px solid "+C.yellow}}/>
+                <span style={{fontSize:10,color:C.textMuted}}>Mes actual</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",background:C.greenLight,borderRadius:10,padding:"10px 14px"}}>
+            <span style={{fontSize:13,color:C.green,fontWeight:500}}>Payback</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.green}}>{pb1?pb1.toFixed(1)+" años":"N/A"}</span>
           </div>
         </div>
 
-        <div style={{ ...S.card, borderTop:"3px solid "+C.yellow }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+        {/* ── DEPTO 2 ─────────────────────────────────────────────────────── */}
+        <div style={{...S.card,borderTop:"3px solid "+C.yellow}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
             <div>
-              <div style={{ fontSize:15, fontWeight:700 }}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
-              <div style={{ fontSize:12, color:C.textSec, marginTop:2 }}>1 dorm · 2 ambientes chicos</div>
+              <div style={{fontSize:15,fontWeight:700}}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
+              <div style={{fontSize:12,color:C.textSec,marginTop:2}}>1 dorm · 2 ambientes chicos</div>
             </div>
-            <span style={{ fontSize:11, background:C.yellowLight, color:C.yellow, padding:"3px 10px", borderRadius:20, fontWeight:600 }}>Por día</span>
+            <span style={{fontSize:11,background:C.yellowLight,color:C.yellow,padding:"3px 10px",borderRadius:20,fontWeight:600}}>Por día</span>
           </div>
-          <div style={{ background:C.yellowLight, borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-              <span style={{ fontSize:12, color:C.yellow, fontWeight:500 }}>Noches estimadas / mes</span>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:13, fontWeight:700, color:C.yellow }}>{nights} · {Math.round(nights/30*100)}%</span>
+          <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontSize:12,color:C.yellow,fontWeight:500}}>Noches estimadas / mes</span>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:13,fontWeight:700,color:C.yellow}}>{nights} · {Math.round(nights/30*100)}%</span>
                 <PinBtn pinKey="nights" value={nights} pinnedValues={pinnedValues} pinValue={pinValue}/>
               </div>
             </div>
-            <input type="range" min={0} max={30} value={nights} onChange={e=>setNights(Number(e.target.value))} style={{ width:"100%", accentColor:C.yellow, cursor:"pointer" }}/>
+            <input type="range" min={0} max={30} value={nights} onChange={e=>setNights(Number(e.target.value))} style={{width:"100%",accentColor:C.yellow,cursor:"pointer"}}/>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
             {[
-              { label:"Ingreso est./mes", value:fARS(inc2ARS), sub:fUSD(inc2USD) },
-              { label:"Neto/mes",         value:fUSD(net2USD), color:net2USD>0?C.green:C.red },
-              { label:"Gastos fijos",     value:fARS(exp2ARS), color:C.red, sub:fUSD(exp2USD) },
-              { label:"Cap Rate",         value:cap2>0?fPct(cap2):"—", color:cap2>4?C.green:C.yellow },
+              {label:"Ingreso est./mes",value:fARS(inc2ARS),sub:fUSD(inc2USD)},
+              {label:"Neto/mes",        value:fUSD(net2USD),color:net2USD>0?C.green:C.red},
+              {label:"Gastos fijos",    value:fARS(exp2ARS),color:C.red,sub:fUSD(exp2USD)},
+              {label:"Cap Rate",        value:cap2>0?fPct(cap2):"—",color:cap2>4?C.green:C.yellow},
             ].map(({label,value,sub,color})=>(
-              <div key={label} style={{ background:C.bg, borderRadius:10, padding:"10px 12px" }}>
-                <div style={{ fontSize:10, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.4px", marginBottom:4, fontWeight:500 }}>{label}</div>
-                <div style={{ fontSize:15, fontWeight:700, color:color||C.text }}>{value}</div>
-                {sub&&<div style={{ fontSize:10, color:C.textMuted, marginTop:2 }}>{sub}</div>}
+              <div key={label} style={{background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+                <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4,fontWeight:500}}>{label}</div>
+                <div style={{fontSize:15,fontWeight:700,color:color||C.text}}>{value}</div>
+                {sub&&<div style={{fontSize:10,color:C.textMuted,marginTop:2}}>{sub}</div>}
               </div>
             ))}
           </div>
-          <div style={{ display:"flex", justifyContent:"space-between", background:C.yellowLight, borderRadius:10, padding:"10px 14px" }}>
-            <span style={{ fontSize:13, color:C.yellow, fontWeight:500 }}>Payback</span>
-            <span style={{ fontSize:14, fontWeight:800, color:C.yellow }}>{pb2?pb2.toFixed(1)+" años":"Negativo"}</span>
+
+          {/* Reservas activas del mes */}
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,border:"1px solid "+C.border}}>
+            <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Reservas este mes</div>
+            {bookings.filter(b=>b.status==="confirmed"&&new Date(b.checkIn).getMonth()===now.getMonth()).length===0?(
+              <div style={{fontSize:12,color:C.textMuted,textAlign:"center",padding:"8px 0"}}>Sin reservas confirmadas</div>
+            ):(
+              bookings.filter(b=>b.status==="confirmed"&&new Date(b.checkIn).getMonth()===now.getMonth()).map(b=>(
+                <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:600}}>{b.guestName}</div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{b.checkIn} → {b.checkOut}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:C.green}}>{fARS(b.totalNetoARS||b.totalARS||0)}</div>
+                    {!b.cobrado&&(
+                      <button onClick={async()=>{
+                        try{
+                          await updateDoc(doc(db,"re_bookings",b.id),{cobrado:true,cobradoEn:new Date().toISOString()});
+                          await reload();
+                        }catch(e){alert("Error: "+e.message);}
+                      }} style={{fontSize:10,background:C.greenLight,color:C.green,border:"none",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontWeight:600,marginTop:2}}>
+                        Marcar cobrado
+                      </button>
+                    )}
+                    {b.cobrado&&<span style={{fontSize:10,color:C.green,fontWeight:600}}>✓ Cobrado</span>}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",background:C.yellowLight,borderRadius:10,padding:"10px 14px"}}>
+            <span style={{fontSize:13,color:C.yellow,fontWeight:500}}>Payback</span>
+            <span style={{fontSize:14,fontWeight:800,color:C.yellow}}>{pb2?pb2.toFixed(1)+" años":"Negativo"}</span>
           </div>
         </div>
       </div>
 
-      <div className="grid-2" style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:16, marginBottom:16 }}>
+      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:16,marginBottom:16}}>
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, marginBottom:4 }}>Ingresos últimos 6 meses</div>
-          <div style={{ fontSize:12, color:C.textSec, marginBottom:20 }}>En USD</div>
-          <div style={{ display:"flex", alignItems:"flex-end", gap:10, height:130 }}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Ingresos últimos 6 meses</div>
+          <div style={{fontSize:12,color:C.textSec,marginBottom:20}}>En USD</div>
+          <div style={{display:"flex",alignItems:"flex-end",gap:10,height:130}}>
             {last6.map((m,i)=>(
-              <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
-                <div style={{ width:"100%", height:100, display:"flex", alignItems:"flex-end" }}>
-                  <div style={{ width:"100%", minHeight:4, height:`${(m.inc/maxBar)*100}%`, background:i===5?`linear-gradient(to top,${C.blue},#3b82f6)`:C.border, borderRadius:"6px 6px 0 0", transition:"height 0.4s" }} title={fUSD(m.inc)}/>
+              <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                <div style={{width:"100%",height:100,display:"flex",alignItems:"flex-end"}}>
+                  <div style={{width:"100%",minHeight:4,height:`${(m.inc/maxBar)*100}%`,
+                    background:i===5?`linear-gradient(to top,${C.blue},#3b82f6)`:C.border,
+                    borderRadius:"6px 6px 0 0",transition:"height 0.4s"}} title={fUSD(m.inc)}/>
                 </div>
-                <span style={{ fontSize:11, color:i===5?C.text:C.textMuted, fontWeight:i===5?600:400 }}>{m.month}</span>
+                <span style={{fontSize:11,color:i===5?C.text:C.textMuted,fontWeight:i===5?600:400}}>{m.month}</span>
               </div>
             ))}
           </div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, marginBottom:4 }}>Recupero de inversión</div>
-          <div style={{ fontSize:12, color:C.textSec, marginBottom:16 }}>20 años · {fUSD(totalVal)}</div>
-          <div style={{ display:"flex", alignItems:"flex-end", gap:2, height:90, marginBottom:14 }}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Recupero de inversión</div>
+          <div style={{fontSize:12,color:C.textSec,marginBottom:16}}>20 años · {fUSD(totalVal)}</div>
+          <div style={{display:"flex",alignItems:"flex-end",gap:2,height:90,marginBottom:14}}>
             {projection.map((r,i)=>{
               const pct=Math.abs(r.cum)/maxAbs*100;
               const isPayback=r.recovered&&!projection[i-1]?.recovered;
               return (
-                <div key={r.year} style={{ flex:1, height:"100%", display:"flex", alignItems:"flex-end" }}>
-                  <div style={{ width:"100%", minHeight:3, height:`${Math.max(pct,3)}%`, borderRadius:"3px 3px 0 0", background:isPayback?C.green:r.recovered?C.greenLight:"#fee2e2" }} title={`Año ${r.year}: ${fUSD(r.cum)}`}/>
+                <div key={r.year} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end"}}>
+                  <div style={{width:"100%",minHeight:3,height:`${Math.max(pct,3)}%`,borderRadius:"3px 3px 0 0",
+                    background:isPayback?C.green:r.recovered?C.greenLight:"#fee2e2"}}
+                    title={`Año ${r.year}: ${fUSD(r.cum)}`}/>
                 </div>
               );
             })}
           </div>
-          {pbYear ? (
-            <div style={{ background:C.greenLight, borderRadius:10, padding:"10px 14px" }}>
-              <div style={{ fontSize:13, fontWeight:700, color:C.green }}>✓ Recupero en año {pbYear}</div>
-              <div style={{ fontSize:11, color:C.textSec, marginTop:2 }}>TIR {fPct(irr)} · Neto {fUSD(totalNet)}/mes</div>
+          {pbYear?(
+            <div style={{background:C.greenLight,borderRadius:10,padding:"10px 14px"}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.green}}>✓ Recupero en año {pbYear}</div>
+              <div style={{fontSize:11,color:C.textSec,marginTop:2}}>TIR {fPct(irr)} · Neto {fUSD(totalNet)}/mes</div>
             </div>
-          ) : (
-            <div style={{ background:C.redLight, borderRadius:10, padding:"10px 14px" }}>
-              <div style={{ fontSize:12, color:C.red, fontWeight:500 }}>No se recupera en 20 años. Revisá Punto de Equilibrio.</div>
+          ):(
+            <div style={{background:C.redLight,borderRadius:10,padding:"10px 14px"}}>
+              <div style={{fontSize:12,color:C.red,fontWeight:500}}>No se recupera en 20 años.</div>
             </div>
           )}
         </div>
@@ -663,27 +785,83 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
       {recentTxs.length>0&&(
         <div style={S.card}>
-          <div style={{ fontSize:15, fontWeight:700, marginBottom:18 }}>Actividad reciente</div>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>Actividad reciente</div>
           {recentTxs.map((t,i)=>(
-            <div key={t.id} style={{ display:"flex", alignItems:"center", gap:14, padding:"12px 0", borderBottom:i<recentTxs.length-1?"1px solid "+C.border:"none" }}>
-              <div style={{ width:36, height:36, borderRadius:10, flexShrink:0, background:t.type==="income"?C.greenLight:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, color:t.type==="income"?C.green:C.red }}>
+            <div key={t.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 0",borderBottom:i<recentTxs.length-1?"1px solid "+C.border:"none"}}>
+              <div style={{width:36,height:36,borderRadius:10,flexShrink:0,
+                background:t.type==="income"?C.greenLight:C.redLight,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:16,color:t.type==="income"?C.green:C.red}}>
                 {t.type==="income"?"↑":"↓"}
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:14, fontWeight:500 }}>{t.description}</div>
-                <div style={{ fontSize:12, color:C.textMuted, marginTop:2 }}>{t.date}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:500}}>{t.description}</div>
+                <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{t.date}</div>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontSize:14, fontWeight:700, color:t.type==="income"?C.green:C.red }}>{t.type==="income"?"+":"−"}{fUSD(t.amountUSD)}</div>
-                <div style={{ fontSize:11, color:C.textMuted }}>{fARS(t.amountARS)}</div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:14,fontWeight:700,color:t.type==="income"?C.green:C.red}}>
+                  {t.type==="income"?"+":"−"}{fUSD(t.amountUSD)}
+                </div>
+                <div style={{fontSize:11,color:C.textMuted}}>{fARS(t.amountARS)}</div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Modal registrar cobro */}
+      {showCobro&&(
+        <div style={S.modal}>
+          <div className="modal-box" style={S.modalBox}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
+              <div style={{fontSize:18,fontWeight:700}}>💰 Registrar cobro · Renta Fija</div>
+              <button onClick={()=>setShowCobro(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={S.label}>Mes</label>
+                  <select style={S.input} value={cobroMes} onChange={e=>setCobroMes(Number(e.target.value))}>
+                    {MESES.map((m,i)=><option key={i} value={i}>{m} {cobroAnio}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Año</label>
+                  <input type="number" style={S.input} value={cobroAnio} onChange={e=>setCobroAnio(Number(e.target.value))}/>
+                </div>
+              </div>
+              <div>
+                <label style={S.label}>Monto cobrado (ARS)</label>
+                <input type="number" style={S.input} placeholder={String(inc1ARS)} value={cobroMonto} onChange={e=>setCobroMonto(e.target.value)}/>
+                {cobroMonto>0&&(
+                  <div style={{fontSize:12,color:C.textSec,marginTop:6}}>
+                    ≈ <span style={{color:C.green,fontWeight:600}}>{fUSD(arsToUsd(Number(cobroMonto),tc))}</span> al TC ${tc.toLocaleString("es-AR")}
+                  </div>
+                )}
+              </div>
+              {mesesCobrados.includes(cobroMes)&&(
+                <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.yellow,fontWeight:500}}>
+                  ⚠ Ya hay un cobro registrado para {MESES[cobroMes]} {cobroAnio}
+                </div>
+              )}
+              <div style={{background:C.greenLight,borderRadius:10,padding:"10px 14px"}}>
+                <div style={{fontSize:12,color:C.green}}>Se registrará como: <strong>Alquiler {MESES[cobroMes]} {cobroAnio}</strong> · Propiedad: {d1?.name||"Depto 1"}</div>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={registrarCobro} disabled={savingCobro} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>
+                  {savingCobro?"Guardando...":"Registrar cobro"}
+                </button>
+                <button onClick={()=>setShowCobro(false)} style={S.btnSec}>Cancelar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
 function Equilibrio({ tc, pinnedValues, pinValue }) {
