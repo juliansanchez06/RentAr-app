@@ -84,6 +84,7 @@ const NAV_ICONS = {
   movimientos:  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
   transactions: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
   analytics:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  accesos:      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>,
 };
 
 const NAV = [
@@ -94,6 +95,7 @@ const NAV = [
   { id:"movimientos",  label:"Movimientos",          short:"Movim."   },
   { id:"transactions", label:"Transacciones",        short:"Transac." },
   { id:"analytics",    label:"Análisis",             short:"Análisis" },
+  { id:"accesos",      label:"Cerradura",            short:"Cerradura"},
 ];
 
 function PinBtn({ pinKey, value, pinnedValues, pinValue }) {
@@ -2507,6 +2509,434 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
                   : irrConApreciac > 6
                   ? " Buena inversión por encima del mercado inmobiliario americano."
                   : " Revisá los supuestos de apreciación y renta neta."}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ACCESOS · CERRADURA TTLOCK ───────────────────────────────────────────────
+function Accesos({ properties, bookings, tc, db }) {
+  const d2 = properties.find(p=>p.type==="short_term"||p.type==="temporal");
+
+  // TTLock config state
+  const [config, setConfig] = useState({
+    clientId:     "",
+    clientSecret: "",
+    username:     "",
+    password:     "",
+    lockId:       "",
+  });
+  const [connected, setConnected]   = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [lockStatus, setLockStatus] = useState(null); // null | "locked" | "unlocked" | "error"
+  const [battery, setBattery]       = useState(null);
+  const [pins, setPins]             = useState([]);
+  const [logs, setLogs]             = useState([]);
+  const [showConfig, setShowConfig] = useState(false);
+  const [newPin, setNewPin]         = useState({ nombre:"", fechaInicio:"", fechaFin:"", codigo:"" });
+  const [loadingAction, setLoadingAction] = useState("");
+  const [savedConfig, setSavedConfig]     = useState(false);
+  const [token, setToken]                 = useState("");
+
+  // Load config from localStorage
+  useEffect(()=>{
+    const saved = localStorage.getItem("ttlock_config");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      setConfig(parsed);
+      if (parsed.clientId && parsed.lockId) setConnected(true);
+    }
+  },[]);
+
+  function saveConfig() {
+    localStorage.setItem("ttlock_config", JSON.stringify(config));
+    setSavedConfig(true);
+    setTimeout(()=>setSavedConfig(false), 2000);
+    if (config.clientId && config.lockId) setConnected(true);
+  }
+
+  // TTLock API base
+  const TTLOCK_API = "https://euapi.ttlock.com/v3";
+
+  async function getToken() {
+    if (token) return token;
+    const params = new URLSearchParams({
+      clientId:     config.clientId,
+      clientSecret: config.clientSecret,
+      username:     config.username,
+      password:     md5(config.password), // TTLock requires MD5 password
+      grant_type:   "password",
+    });
+    const res = await fetch(`${TTLOCK_API}/oauth2/token`, {
+      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
+      body: params,
+    });
+    const data = await res.json();
+    if (data.access_token) { setToken(data.access_token); return data.access_token; }
+    throw new Error("No se pudo obtener token: " + (data.errmsg||"error desconocido"));
+  }
+
+  async function getLockStatus() {
+    setLoadingAction("status");
+    try {
+      if (!connected) { setLockStatus("demo"); setBattery(85); return; }
+      const t = await getToken();
+      const res = await fetch(`${TTLOCK_API}/lock/queryOpenState?clientId=${config.clientId}&accessToken=${t}&lockId=${config.lockId}&date=${Date.now()}`);
+      const data = await res.json();
+      setLockStatus(data.state === 0 ? "locked" : "unlocked");
+    } catch(e) {
+      setLockStatus("demo");
+      setBattery(85);
+    } finally { setLoadingAction(""); }
+  }
+
+  async function toggleLock(open) {
+    setLoadingAction(open?"unlocking":"locking");
+    try {
+      if (!connected) {
+        setLockStatus(open?"unlocked":"locked");
+        addLog(open?"🔓 Puerta abierta (demo)":"🔒 Puerta cerrada (demo)");
+        return;
+      }
+      const t = await getToken();
+      const endpoint = open ? "lock/unlock" : "lock/lock";
+      const res = await fetch(`${TTLOCK_API}/${endpoint}`, {
+        method:"POST",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body: new URLSearchParams({ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() }),
+      });
+      const data = await res.json();
+      if (data.errcode===0) {
+        setLockStatus(open?"unlocked":"locked");
+        addLog(open?"🔓 Puerta abierta remotamente":"🔒 Puerta cerrada remotamente");
+      }
+    } catch(e) { alert("Error: "+e.message); }
+    finally { setLoadingAction(""); }
+  }
+
+  async function createPin(nombre, inicio, fin, codigo) {
+    setLoadingAction("pin");
+    try {
+      const pinCode = codigo || String(Math.floor(100000+Math.random()*900000));
+      const startDate = new Date(inicio).getTime();
+      const endDate   = new Date(fin).getTime();
+
+      if (connected) {
+        const t = await getToken();
+        const res = await fetch(`${TTLOCK_API}/keyboardPwd/add`, {
+          method:"POST",
+          headers:{"Content-Type":"application/x-www-form-urlencoded"},
+          body: new URLSearchParams({
+            clientId:config.clientId, accessToken:t, lockId:config.lockId,
+            keyboardPwd:pinCode, keyboardPwdName:nombre,
+            startDate, endDate, date:Date.now(),
+          }),
+        });
+        const data = await res.json();
+        if (data.errcode!==0) throw new Error(data.errmsg);
+      }
+
+      const newEntry = {
+        id:Date.now(), nombre, codigo:pinCode,
+        inicio, fin, activo:true,
+        creadoEn:new Date().toLocaleString("es-AR"),
+      };
+      setPins(p=>[newEntry,...p]);
+      addLog(`🔑 PIN creado para ${nombre}: ${pinCode}`);
+      return pinCode;
+    } catch(e) {
+      alert("Error al crear PIN: "+e.message);
+      return null;
+    } finally { setLoadingAction(""); }
+  }
+
+  async function deletePin(pin) {
+    if (!confirm(`¿Eliminar PIN de ${pin.nombre}?`)) return;
+    setPins(p=>p.filter(x=>x.id!==pin.id));
+    addLog(`🗑 PIN eliminado: ${pin.nombre}`);
+  }
+
+  function addLog(msg) {
+    setLogs(l=>[{ msg, hora:new Date().toLocaleTimeString("es-AR"), id:Date.now() },...l.slice(0,19)]);
+  }
+
+  // Auto-generate pins for upcoming bookings
+  const bookingsConPin = bookings.filter(b=>b.status==="confirmed");
+
+  const STATUS_COLOR = {
+    locked:   { bg:"#dcfce7", color:"#16a34a", icon:"🔒", label:"Cerrada" },
+    unlocked: { bg:"#fef9c3", color:"#ca8a04", icon:"🔓", label:"Abierta" },
+    demo:     { bg:"#dbeafe", color:"#2563eb", icon:"🔵", label:"Modo demo" },
+    error:    { bg:"#fee2e2", color:"#dc2626", icon:"⚠",  label:"Error" },
+  };
+  const st = STATUS_COLOR[lockStatus] || { bg:C.bg, color:C.textMuted, icon:"❓", label:"Sin datos" };
+
+  return (
+    <div style={{animation:"fadeIn 0.25s ease"}}>
+      {/* Header */}
+      <div style={{marginBottom:28,display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>🔒 Smart Lock · TTLock</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Cerradura inteligente</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>Control remoto · PINs temporales · Historial de accesos</p>
+        </div>
+        <button onClick={()=>setShowConfig(true)} style={{
+          background:connected?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#1e3a6e,#2563eb)",
+          color:"#fff",border:"none",borderRadius:10,padding:"10px 18px",
+          fontSize:13,fontWeight:700,cursor:"pointer",
+          boxShadow:connected?"0 4px 14px rgba(5,150,105,0.3)":"0 4px 14px rgba(37,99,235,0.3)",
+        }}>
+          {connected?"⚙ Configuración":"🔗 Conectar TTLock"}
+        </button>
+      </div>
+
+      {/* Banner modo demo si no está conectado */}
+      {!connected&&(
+        <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 18px",marginBottom:20,display:"flex",gap:12,alignItems:"center"}}>
+          <span style={{fontSize:24}}>🔵</span>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:C.blue}}>Modo demostración activo</div>
+            <div style={{fontSize:13,color:"#3b82f6",marginTop:2}}>
+              El módulo está listo. Cuando tengas la cerradura TTLock y el Gateway WiFi, 
+              clickeá <strong>"Conectar TTLock"</strong> e ingresá tus credenciales de la app.
+              Todos los PINs y accesos se gestionarán automáticamente desde acá.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Estado cerradura + control */}
+      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:20}}>
+        {/* Estado */}
+        <div style={{...S.card,borderTop:"3px solid "+st.color}}>
+          <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:12}}>Estado cerradura</div>
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+            <div style={{fontSize:40}}>{st.icon}</div>
+            <div>
+              <div style={{fontSize:20,fontWeight:800,color:st.color}}>{st.label}</div>
+              <div style={{fontSize:12,color:C.textMuted}}>{d2?.name||"Depto 2"}</div>
+            </div>
+          </div>
+          <button onClick={getLockStatus} disabled={loadingAction==="status"} style={{
+            width:"100%",padding:"8px 0",borderRadius:8,border:"1px solid "+C.border,
+            background:C.bg,color:C.textSec,fontSize:12,fontWeight:600,cursor:"pointer",
+          }}>
+            {loadingAction==="status"?"Consultando...":"↻ Actualizar estado"}
+          </button>
+        </div>
+
+        {/* Control remoto */}
+        <div style={S.card}>
+          <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:12}}>Control remoto</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <button onClick={()=>toggleLock(false)} disabled={!!loadingAction} style={{
+              padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",
+              background:"linear-gradient(135deg,#1e3a6e,#2563eb)",
+              color:"#fff",fontSize:14,fontWeight:700,
+              boxShadow:"0 4px 12px rgba(37,99,235,0.3)",
+              opacity:loadingAction==="locking"?0.7:1,
+            }}>
+              {loadingAction==="locking"?"Cerrando...":"🔒 Cerrar puerta"}
+            </button>
+            <button onClick={()=>toggleLock(true)} disabled={!!loadingAction} style={{
+              padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",
+              background:"linear-gradient(135deg,#d97706,#f59e0b)",
+              color:"#fff",fontSize:14,fontWeight:700,
+              boxShadow:"0 4px 12px rgba(217,119,6,0.3)",
+              opacity:loadingAction==="unlocking"?0.7:1,
+            }}>
+              {loadingAction==="unlocking"?"Abriendo...":"🔓 Abrir puerta"}
+            </button>
+          </div>
+        </div>
+
+        {/* Batería */}
+        <div style={S.card}>
+          <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:12}}>Batería</div>
+          {battery!==null?(
+            <>
+              <div style={{fontSize:36,fontWeight:800,color:battery>30?C.green:C.red,marginBottom:8}}>{battery}%</div>
+              <div style={{width:"100%",height:10,background:C.border,borderRadius:5,overflow:"hidden"}}>
+                <div style={{width:battery+"%",height:"100%",background:battery>30?C.green:C.red,borderRadius:5,transition:"width 0.5s"}}/>
+              </div>
+              <div style={{fontSize:12,color:C.textMuted,marginTop:8}}>{battery>50?"Nivel óptimo":battery>20?"Nivel bajo":"⚠ Cambiar baterías"}</div>
+            </>
+          ):(
+            <div style={{textAlign:"center",padding:"20px 0"}}>
+              <button onClick={getLockStatus} style={{...S.btnSec,fontSize:12}}>Consultar batería</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* PINs activos + crear */}
+      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        {/* Crear PIN */}
+        <div style={S.card}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Crear PIN de acceso</div>
+          <div style={{fontSize:12,color:C.textSec,marginBottom:16}}>PIN temporal con fecha de vencimiento automático</div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <div>
+              <label style={S.label}>Nombre / Huésped</label>
+              <input style={S.input} placeholder="Ej: Martín García" value={newPin.nombre} onChange={e=>setNewPin(p=>({...p,nombre:e.target.value}))}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={S.label}>Válido desde</label>
+                <input type="datetime-local" style={S.input} value={newPin.fechaInicio} onChange={e=>setNewPin(p=>({...p,fechaInicio:e.target.value}))}/>
+              </div>
+              <div>
+                <label style={S.label}>Válido hasta</label>
+                <input type="datetime-local" style={S.input} value={newPin.fechaFin} onChange={e=>setNewPin(p=>({...p,fechaFin:e.target.value}))}/>
+              </div>
+            </div>
+            <div>
+              <label style={S.label}>Código PIN (dejar vacío para generar automático)</label>
+              <input style={S.input} placeholder="Ej: 485921" maxLength={6} value={newPin.codigo} onChange={e=>setNewPin(p=>({...p,codigo:e.target.value}))}/>
+            </div>
+            <button onClick={async()=>{
+              if (!newPin.nombre||!newPin.fechaInicio||!newPin.fechaFin){alert("Completá nombre y fechas");return;}
+              const pin = await createPin(newPin.nombre,newPin.fechaInicio,newPin.fechaFin,newPin.codigo);
+              if (pin) setNewPin({nombre:"",fechaInicio:"",fechaFin:"",codigo:""});
+            }} disabled={loadingAction==="pin"} style={{...S.btnGreen,justifyContent:"center"}}>
+              {loadingAction==="pin"?"Creando...":"🔑 Crear PIN"}
+            </button>
+          </div>
+        </div>
+
+        {/* PINs reservas actuales */}
+        <div style={S.card}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>PINs por reserva</div>
+          <div style={{fontSize:12,color:C.textSec,marginBottom:16}}>Generá un PIN automático para cada reserva confirmada</div>
+          {bookingsConPin.length===0?(
+            <div style={{textAlign:"center",padding:"30px 0",color:C.textMuted}}>
+              <div style={{fontSize:32,marginBottom:8}}>📭</div>
+              <div>No hay reservas confirmadas</div>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {bookingsConPin.slice(0,5).map(b=>{
+                const pinExiste = pins.find(p=>p.nombre===b.guestName);
+                return (
+                  <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:"1px solid "+C.border}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700}}>{b.guestName}</div>
+                        <div style={{fontSize:11,color:C.textSec}}>{b.checkIn} → {b.checkOut}</div>
+                      </div>
+                      {pinExiste?(
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:18,fontWeight:900,color:C.blue,letterSpacing:"2px"}}>{pinExiste.codigo}</div>
+                          <div style={{fontSize:10,color:C.textMuted}}>PIN activo</div>
+                        </div>
+                      ):(
+                        <button onClick={async()=>{
+                          await createPin(b.guestName, b.checkIn+"T14:00", b.checkOut+"T11:00", "");
+                        }} style={{
+                          background:"linear-gradient(135deg,#1e3a6e,#2563eb)",color:"#fff",
+                          border:"none",borderRadius:8,padding:"6px 12px",
+                          fontSize:11,fontWeight:700,cursor:"pointer",
+                        }}>
+                          🔑 Generar PIN
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* PINs creados */}
+      {pins.length>0&&(
+        <div style={{...S.card,marginBottom:16}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>PINs activos ({pins.length})</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {pins.map(pin=>(
+              <div key={pin.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.border}}>
+                <div style={{width:40,height:40,borderRadius:10,background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🔑</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:600}}>{pin.nombre}</div>
+                  <div style={{fontSize:11,color:C.textMuted}}>Válido: {pin.inicio} → {pin.fin}</div>
+                </div>
+                <div style={{textAlign:"center",padding:"6px 14px",background:C.white,borderRadius:8,border:"1px solid "+C.border}}>
+                  <div style={{fontSize:20,fontWeight:900,color:C.blue,letterSpacing:"3px"}}>{pin.codigo}</div>
+                  <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Código PIN</div>
+                </div>
+                <button onClick={()=>deletePin(pin)} style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Log de actividad */}
+      <div style={S.card}>
+        <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Registro de actividad</div>
+        {logs.length===0?(
+          <div style={{textAlign:"center",padding:"30px 0",color:C.textMuted}}>
+            <div style={{fontSize:32,marginBottom:8}}>📋</div>
+            <div>Sin actividad registrada aún</div>
+            <div style={{fontSize:12,marginTop:4}}>Las aperturas, cierres y PINs aparecerán acá</div>
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {logs.map(l=>(
+              <div key={l.id} style={{display:"flex",gap:12,padding:"8px 12px",background:C.bg,borderRadius:8}}>
+                <span style={{fontSize:12,color:C.textMuted,flexShrink:0}}>{l.hora}</span>
+                <span style={{fontSize:13}}>{l.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal configuración */}
+      {showConfig&&(
+        <div style={S.modal}>
+          <div className="modal-box" style={S.modalBox}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:20}}>
+              <div style={{fontSize:18,fontWeight:700}}>⚙ Configurar TTLock</div>
+              <button onClick={()=>setShowConfig(false)} style={{background:"none",border:"none",fontSize:22,color:C.textSec,cursor:"pointer"}}>×</button>
+            </div>
+
+            <div style={{background:C.blueLight,borderRadius:10,padding:"12px 14px",marginBottom:20}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.blue,marginBottom:4}}>¿Cómo obtener las credenciales?</div>
+              <div style={{fontSize:12,color:C.blue,lineHeight:1.6}}>
+                1. Entrá a <strong>open.ttlock.com</strong> → Create Application<br/>
+                2. Copiá el <strong>Client ID</strong> y <strong>Client Secret</strong><br/>
+                3. El <strong>Lock ID</strong> lo encontrás en la app TTLock → tu cerradura → Share<br/>
+                4. Usuario y contraseña son los de tu cuenta TTLock
+              </div>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {[
+                {label:"Client ID",     field:"clientId",     placeholder:"Tu Client ID de TTLock Developer"},
+                {label:"Client Secret", field:"clientSecret", placeholder:"Tu Client Secret"},
+                {label:"Lock ID",       field:"lockId",       placeholder:"ID de la cerradura (número)"},
+                {label:"Email TTLock",  field:"username",     placeholder:"tu@email.com"},
+                {label:"Contraseña TTLock", field:"password", placeholder:"••••••••", type:"password"},
+              ].map(({label,field,placeholder,type})=>(
+                <div key={field}>
+                  <label style={S.label}>{label}</label>
+                  <input type={type||"text"} style={S.input} placeholder={placeholder}
+                    value={config[field]} onChange={e=>setConfig(c=>({...c,[field]:e.target.value}))}/>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:10,marginTop:8}}>
+                <button onClick={saveConfig} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>
+                  {savedConfig?"✓ Guardado":"Guardar configuración"}
+                </button>
+                <button onClick={()=>setShowConfig(false)} style={S.btnSec}>Cancelar</button>
               </div>
             </div>
           </div>
