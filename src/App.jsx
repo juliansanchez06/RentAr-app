@@ -2061,253 +2061,217 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
       )}
 
       {showForm&&(
-        <div style={S.modal}>
-          <div className="modal-box" style={S.modalBox}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
-              <div style={{fontSize:18,fontWeight:700}}>Nueva reserva</div>
-              <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
+        <div style={{
+          position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",
+          backdropFilter:"blur(6px)",zIndex:100,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          padding:"12px",
+        }}>
+          <div style={{
+            background:C.white,borderRadius:20,
+            width:"100%",maxWidth:900,
+            maxHeight:"95vh",overflowY:"auto",
+            boxShadow:"0 24px 60px rgba(0,0,0,0.25)",
+          }}>
+            {/* Header azul */}
+            <div style={{
+              background:"linear-gradient(135deg,#0f2156,#1e3a6e)",
+              padding:"16px 24px",borderRadius:"20px 20px 0 0",
+              display:"flex",justifyContent:"space-between",alignItems:"center",
+              position:"sticky",top:0,zIndex:10,
+            }}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:"#fff"}}>Nueva reserva</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:2}}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
+              </div>
+              <button onClick={()=>setShowForm(false)} style={{
+                background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",
+                borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,
+                display:"flex",alignItems:"center",justifyContent:"center",
+              }}>×</button>
             </div>
-            {error&&<div style={{background:C.redLight,border:"1px solid #fca5a5",borderRadius:10,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:16,fontWeight:500}}>{error}</div>}
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div><label style={S.label}>Huésped *</label><input style={S.input} value={form.guestName} onChange={e=>setF("guestName",e.target.value)} placeholder="Juan Pérez"/></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div><label style={S.label}>Email</label><input type="email" style={S.input} value={form.guestEmail} onChange={e=>setF("guestEmail",e.target.value)}/></div>
-                <div><label style={S.label}>Teléfono</label><input style={S.input} value={form.guestPhone} onChange={e=>setF("guestPhone",e.target.value)}/></div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div><label style={S.label}>Check-in *</label><input type="date" style={S.input} value={form.checkIn} onChange={e=>setF("checkIn",e.target.value)}/></div>
-                <div><label style={S.label}>Check-out *</label><input type="date" style={S.input} value={form.checkOut} onChange={e=>setF("checkOut",e.target.value)}/></div>
-              </div>
-              <div>
-                <label style={S.label}>Plataforma / Fuente</label>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-                  {PLATAFORMAS.map(({key,label,pct})=>(
-                    <button key={key} onClick={()=>handleSourceChange(key)} style={{padding:"8px 6px",borderRadius:8,border:"1.5px solid "+(form.source===key?C.blue:C.border),background:form.source===key?C.blueLight:C.white,color:form.source===key?C.blue:C.textSec,fontSize:12,fontWeight:form.source===key?700:400,cursor:"pointer"}}>
-                      {label}{pct>0&&<div style={{fontSize:10,color:C.red}}>{pct}%</div>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Cantidad de personas */}
-              <div>
-                <label style={S.label}>Cantidad de personas</label>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-                  {[1,2,3].map(n=>(
-                    <button key={n} type="button" onClick={()=>setF("personas",n)} style={{
-                      padding:"10px 0",borderRadius:10,border:"1.5px solid "+(form.personas===n?C.blue:C.border),
-                      background:form.personas===n?C.blueLight:"transparent",
-                      color:form.personas===n?C.blue:C.textSec,
-                      fontWeight:form.personas===n?700:400,fontSize:14,cursor:"pointer",
-                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
-                    }}>
-                      <span style={{fontSize:18}}>{"👤".repeat(n)}</span>
-                      <span>{n} {n===1?"persona":"personas"}</span>
-                      {n<3&&<span style={{fontSize:10,color:n===form.personas?C.blue:C.textMuted}}>
-                        −{n===1?desc1PersV:desc2PersV}% desc.
-                      </span>}
-                      {n===3&&<span style={{fontSize:10,color:n===form.personas?C.blue:C.green}}>Tarifa completa</span>}
-                    </button>
-                  ))}
-                </div>
-                {form.personas<3&&(
-                  <div style={{fontSize:12,color:C.blue,marginTop:6,background:C.blueLight,padding:"6px 10px",borderRadius:8}}>
-                    💡 Tarifa ajustada: {fARS(tarifaPersonas)}/noche (−{form.personas===1?desc1PersV:desc2PersV}% por {form.personas===1?"1 persona":"2 personas"})
-                  </div>
-                )}
-              </div>
-              <div><label style={S.label}>Estado</label><select style={S.input} value={form.status} onChange={e=>setF("status",e.target.value)}><option value="confirmed">Confirmada</option><option value="blocked">Bloqueado</option></select></div>
-              {belowMin&&(
-                <div style={{background:C.redLight,borderRadius:12,padding:"12px 16px",border:"1px solid "+C.red}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.red}}>⚠ Mínimo {minNightsVal} noches requeridas</div>
-                  <div style={{fontSize:12,color:C.red,marginTop:4}}>Esta reserva está por debajo del mínimo configurado en Punto de Equilibrio. Cambiá las fechas o ajustá el mínimo.</div>
-                </div>
-              )}
-              {pricing&&(
-                <div style={{background:pricing.available===false?C.redLight:C.greenLight,borderRadius:12,padding:"14px 16px",border:pricing.available===false?"1px solid "+C.red:"none"}}>
-                  <div style={{fontSize:13,fontWeight:600,color:pricing.available===false?C.red:C.green,marginBottom:10}}>{nights} noches · {pricing.label}</div>
 
-                  {/* Lo que paga el huésped */}
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:11,color:C.textSec,marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>Lo que paga el huésped</div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div>
-                        <div style={{fontSize:20,fontWeight:800,color:C.text}}>{fARS(pricing.total)}</div>
-                        <div style={{fontSize:12,color:C.textSec}}>{fARS(pricing.perNight)}/noche × {nights} noches</div>
-                        <div style={{fontSize:12,color:C.green,fontWeight:600}}>{fUSD(arsToUsd(pricing.total,tc))}</div>
+            {error&&(
+              <div style={{background:C.redLight,padding:"10px 24px",fontSize:13,color:C.red,fontWeight:600}}>⚠ {error}</div>
+            )}
+
+            {/* 2 columnas */}
+            <div className="booking-modal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+
+              {/* Col izquierda - formulario */}
+              <div style={{padding:"20px 24px",borderRight:"1px solid "+C.border}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:"1px",marginBottom:14}}>Datos del huésped</div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div>
+                    <label style={S.label}>Nombre *</label>
+                    <input style={S.input} value={form.guestName} onChange={e=>setF("guestName",e.target.value)} placeholder="Juan Pérez"/>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div>
+                      <label style={S.label}>Email</label>
+                      <input type="email" style={S.input} value={form.guestEmail} onChange={e=>setF("guestEmail",e.target.value)} placeholder="juan@email.com"/>
+                    </div>
+                    <div>
+                      <label style={S.label}>Teléfono</label>
+                      <input style={S.input} value={form.guestPhone} onChange={e=>setF("guestPhone",e.target.value)} placeholder="+54 9..."/>
+                    </div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div>
+                      <label style={S.label}>Check-in *</label>
+                      <input type="date" style={S.input} value={form.checkIn} onChange={e=>setF("checkIn",e.target.value)}/>
+                    </div>
+                    <div>
+                      <label style={S.label}>Check-out *</label>
+                      <input type="date" style={S.input} value={form.checkOut} onChange={e=>setF("checkOut",e.target.value)}/>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={S.label}>Plataforma</label>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                      {PLATAFORMAS.map(({key,label,pct})=>(
+                        <button key={key} onClick={()=>handleSourceChange(key)} style={{
+                          padding:"8px 4px",borderRadius:8,
+                          border:"1.5px solid "+(form.source===key?C.blue:C.border),
+                          background:form.source===key?C.blueLight:"transparent",
+                          color:form.source===key?C.blue:C.textSec,
+                          fontSize:11,fontWeight:form.source===key?700:400,cursor:"pointer",
+                        }}>
+                          <div>{label}</div>
+                          {pct>0&&<div style={{fontSize:10,color:C.red}}>{pct}%</div>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={S.label}>Personas</label>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                      {[1,2,3].map(n=>(
+                        <button key={n} type="button" onClick={()=>setF("personas",n)} style={{
+                          padding:"10px 6px",borderRadius:10,
+                          border:"1.5px solid "+(form.personas===n?C.blue:C.border),
+                          background:form.personas===n?C.blueLight:"transparent",
+                          color:form.personas===n?C.blue:C.textSec,
+                          fontWeight:form.personas===n?700:400,fontSize:12,cursor:"pointer",
+                          display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                        }}>
+                          <span style={{fontSize:16}}>{"👤".repeat(n)}</span>
+                          <span>{n} {n===1?"persona":"personas"}</span>
+                          {n<3
+                            ?<span style={{fontSize:10,color:n===form.personas?C.blue:C.yellow}}>−{n===1?desc1PersV:desc2PersV}%</span>
+                            :<span style={{fontSize:10,color:n===form.personas?C.blue:C.green}}>Precio lleno</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={S.label}>Estado</label>
+                    <select style={S.input} value={form.status} onChange={e=>setF("status",e.target.value)}>
+                      <option value="confirmed">Confirmada</option>
+                      <option value="blocked">Bloqueado</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Col derecha - resumen */}
+              <div className="booking-modal-col-right" style={{padding:"20px 24px",background:C.bg,display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:"1px"}}>Resumen de precio</div>
+
+                {nights===0?(
+                  <div style={{background:C.white,borderRadius:12,padding:"30px",textAlign:"center",border:"1px solid "+C.border,color:C.textMuted,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                    <div style={{fontSize:32}}>📅</div>
+                    <div style={{fontSize:13}}>Seleccioná las fechas para ver el precio</div>
+                  </div>
+                ):(
+                  <>
+                    {/* Noches */}
+                    <div style={{background:C.white,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:15,fontWeight:700}}>{nights} {nights===1?"noche":"noches"}</span>
+                        <span style={{
+                          fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
+                          background:belowMin?C.redLight:C.greenLight,
+                          color:belowMin?C.red:C.green,
+                        }}>
+                          {belowMin?`⚠ Mín. ${minNightsVal}n`:"✓ OK"}
+                        </span>
                       </div>
-                      {pricing.comision>0&&(
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:11,color:C.red}}>−{fARS(pricing.comision)}</div>
-                          <div style={{fontSize:10,color:C.red}}>comisión {commPct}%</div>
+                      {pricing&&<div style={{fontSize:12,color:C.textSec,marginTop:4}}>{pricing.label}</div>}
+                    </div>
+
+                    {/* Descuento personas */}
+                    {form.personas<3&&(
+                      <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.yellow+"44"}}>
+                        <div style={{fontSize:11,color:C.yellow,fontWeight:700}}>Descuento grupo · {form.personas===1?"1 persona":"2 personas"}</div>
+                        <div style={{fontSize:14,fontWeight:700,marginTop:2}}>{fARS(tarifaPersonas)}/noche</div>
+                        <div style={{fontSize:11,color:C.yellow}}>−{form.personas===1?desc1PersV:desc2PersV}% sobre tarifa base</div>
+                      </div>
+                    )}
+
+                    {/* Precio huésped */}
+                    {pricing&&!belowMin&&(
+                      <>
+                        <div style={{background:C.white,borderRadius:12,padding:"14px",border:"1px solid "+C.border}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Lo que paga el huésped</div>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                            <div>
+                              <div style={{fontSize:26,fontWeight:900}}>{fARS(pricing.total)}</div>
+                              <div style={{fontSize:12,color:C.textSec}}>{fARS(pricing.perNight)}/n × {nights}n</div>
+                            </div>
+                            <div style={{fontSize:15,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(pricing.total,tc))}</div>
+                          </div>
+                          {pricing.comision>0&&(
+                            <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 0",marginTop:8,borderTop:"1px solid "+C.border,fontSize:12,color:C.red}}>
+                              <span>Comisión {commPct}%</span>
+                              <span>−{fARS(pricing.comision)}</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Lo que recibís vos */}
-                  <div style={{borderTop:"1px solid rgba(0,0,0,0.1)",paddingTop:10}}>
-                    <div style={{fontSize:11,color:C.textSec,marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>Lo que recibís vos</div>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div>
-                        <div style={{fontSize:18,fontWeight:800,color:C.green}}>{fARS(pricing.netoReal)}</div>
-                        <div style={{fontSize:11,color:C.textMuted}}>Después de comisión y limpieza interna</div>
-                        <div style={{fontSize:12,color:C.green,fontWeight:600}}>{fUSD(arsToUsd(pricing.netoReal,tc))}</div>
+                        <div style={{background:"linear-gradient(135deg,#d1fae5,#a7f3d0)",borderRadius:12,padding:"14px",border:"1px solid "+C.green}}>
+                          <div style={{fontSize:10,fontWeight:700,color:C.green,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Lo que recibís vos</div>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+                            <div>
+                              <div style={{fontSize:26,fontWeight:900,color:C.green}}>{fARS(pricing.netoReal)}</div>
+                              <div style={{fontSize:12,color:"#065f46"}}>Neto final</div>
+                            </div>
+                            <div style={{fontSize:15,fontWeight:700,color:C.green}}>{fUSD(arsToUsd(pricing.netoReal,tc))}</div>
+                          </div>
+                          <div style={{fontSize:11,color:"#065f46",marginTop:8,display:"flex",flexDirection:"column",gap:2}}>
+                            {pricing.comision>0&&<span>−{fARS(pricing.comision)} comisión plataforma</span>}
+                            <span>−{fARS(pricing.costoLimpieza)} costo limpieza</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {belowMin&&(
+                      <div style={{background:C.redLight,borderRadius:12,padding:"14px",border:"1px solid "+C.red}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.red}}>⚠ Bajo el mínimo</div>
+                        <div style={{fontSize:12,color:C.red,marginTop:4}}>Mínimo {minNightsVal} noches requeridas. Ajustá las fechas.</div>
                       </div>
-                      <div style={{textAlign:"right",fontSize:11,color:C.textMuted}}>
-                        {pricing.comision>0&&<div>−{fARS(pricing.comision)} comisión</div>}
-                        <div>−{fARS(pricing.costoLimpieza)} limpieza</div>
-                      </div>
-                    </div>
-                  </div>
+                    )}
+                  </>
+                )}
+
+                {/* Botones fijos abajo */}
+                <div style={{marginTop:"auto",display:"flex",gap:10,paddingTop:12}}>
+                  <button onClick={save} disabled={saving} style={{
+                    flex:1,padding:"13px 0",border:"none",borderRadius:10,cursor:"pointer",
+                    background:"linear-gradient(135deg,#059669,#10b981)",
+                    color:"#fff",fontSize:14,fontWeight:700,
+                    boxShadow:"0 4px 14px rgba(5,150,105,0.3)",
+                  }}>
+                    {saving?"Guardando...":"✓ Guardar reserva"}
+                  </button>
+                  <button onClick={()=>setShowForm(false)} style={{...S.btnSec,padding:"13px 16px"}}>Cancelar</button>
                 </div>
-              )}
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={save} disabled={saving} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>{saving?"Guardando...":"Guardar reserva"}</button>
-                <button onClick={()=>setShowForm(false)} style={S.btnSec}>Cancelar</button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ── TRANSACCIONES ─────────────────────────────────────────────────────────────
-function Transactions({ properties, transactions, tc, reload, db }) {
-  const [showForm,setShowForm]=useState(false);
-  const [filter,setFilter]=useState("all");
-  const [saving,setSaving]=useState(false);
-  const [error,setError]=useState("");
-  const [type,setType]=useState("income");
-  const [amountARS,setAmountARS]=useState("");
-  const [form,setForm]=useState({propertyId:"",category:"rent",date:todayStr(),description:""});
-  function setF(f,v){setForm(p=>({...p,[f]:v}));}
-
-  const CATS={
-    income:[["rent","Alquiler"],["booking","Reserva"]],
-    expense:[["expensas","Expensas"],["expensas_extraordinarias","Expensas ext."],["impuesto","Impuesto"],["reparacion","Reparación"],["comision","Comisión plataforma"],["limpieza","Limpieza"],["seguro","Seguro"],["internet","Internet"],["luz","Luz/Gas"],["otros","Otros"]],
-  };
-  const catLabel={rent:"Alquiler",booking:"Reserva",expensas:"Expensas",expensas_extraordinarias:"Expensas ext.",impuesto:"Impuesto",reparacion:"Reparación",comision:"Comisión",limpieza:"Limpieza",seguro:"Seguro",internet:"Internet",luz:"Luz/Gas",otros:"Otros"};
-
-  const totals={
-    income: transactions.filter(t=>t.type==="income").reduce((s,t)=>s+t.amountUSD,0),
-    expense:transactions.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amountUSD,0),
-  };
-
-  async function save(){
-    if(!form.propertyId||!amountARS||!form.description){setError("Completá todos los campos.");return;}
-    setSaving(true);setError("");
-    try {
-      const ars=Number(amountARS);
-      await addDoc(collection(db,"re_transactions"),{...form,type,amountARS:ars,amountUSD:arsToUsd(ars,tc),exchangeRateUsed:tc,createdAt:new Date().toISOString()});
-      await reload();
-      setShowForm(false);setAmountARS("");
-      setForm({propertyId:"",category:"rent",date:todayStr(),description:""});
-    } catch(e){setError("Error al guardar: " + e.message);}
-    finally{setSaving(false);}
-  }
-
-  const filtered=filter==="all"?transactions:transactions.filter(t=>t.type===filter);
-  const propName=id=>properties.find(p=>p.id===id)?.name||"—";
-
-  return (
-    <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
-        <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>💳 Ingresos y egresos</div>
-          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Transacciones</h1>
-          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{transactions.length} registros · ARS convertido a USD</p>
-        </div>
-        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#059669,#10b981)",boxShadow:"0 4px 14px rgba(5,150,105,0.3)"}}>
-          + Nueva transacción
-        </button>
-      </div>
-
-      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
-        {[
-          {label:"Ingresos totales",value:fUSD(totals.income), color:C.green,icon:"↑"},
-          {label:"Egresos totales", value:fUSD(totals.expense),color:C.red,  icon:"↓"},
-          {label:"Resultado neto",  value:fUSD(totals.income-totals.expense),color:totals.income>=totals.expense?C.green:C.red,icon:"="},
-        ].map(({label,value,color,icon})=>(
-          <div key={label} style={{...S.card,display:"flex",alignItems:"center",gap:16}}>
-            <div style={{width:44,height:44,borderRadius:12,background:color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color}}>{icon}</div>
-            <div>
-              <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4,fontWeight:600}}>{label}</div>
-              <div style={{fontSize:22,fontWeight:800,color}}>{value}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{display:"flex",gap:8,marginBottom:18}}>
-        {["all","income","expense"].map(f=>(
-          <button key={f} onClick={()=>setFilter(f)} style={{padding:"8px 16px",borderRadius:8,border:"1.5px solid "+(filter===f?C.blue:C.border),background:filter===f?C.blue:C.white,color:filter===f?"#fff":C.textSec,fontSize:13,fontWeight:500,cursor:"pointer"}}>
-            {{all:"Todos",income:"Ingresos",expense:"Egresos"}[f]}
-          </button>
-        ))}
-      </div>
-
-      <div style={{...S.card,padding:0,overflow:"hidden",overflowX:"auto"}}>
-        {filtered.length===0?(
-          <div style={{textAlign:"center",padding:60,color:C.textMuted}}><div style={{fontSize:36,marginBottom:12}}>💳</div><div>No hay transacciones</div></div>
-        ):(
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead>
-              <tr style={{borderBottom:"1px solid "+C.border,background:C.bg}}>
-                {["Fecha","Propiedad","Descripción","Categoría","ARS","USD"].map(h=>(
-                  <th key={h} style={{padding:"12px 18px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",textTransform:"uppercase"}}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(t=>(
-                <tr key={t.id} style={{borderBottom:"1px solid "+C.border}}>
-                  <td style={{padding:"11px 18px",color:C.textSec}}>{t.date}</td>
-                  <td style={{padding:"11px 18px",color:C.textSec,fontSize:12}}>{propName(t.propertyId)}</td>
-                  <td style={{padding:"11px 18px",fontWeight:500}}>{t.description}</td>
-                  <td style={{padding:"11px 18px"}}><span style={{background:C.bg,color:C.textSec,padding:"3px 8px",borderRadius:6,fontSize:11,border:"1px solid "+C.border}}>{catLabel[t.category]||t.category}</span></td>
-                  <td style={{padding:"11px 18px",color:C.textSec}}>{fARS(t.amountARS)}</td>
-                  <td style={{padding:"11px 18px",fontWeight:700,color:t.type==="income"?C.green:C.red}}>{t.type==="income"?"+":"−"}{fUSD(t.amountUSD)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {showForm&&(
-        <div style={S.modal}>
-          <div className="modal-box" style={S.modalBox}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
-              <div style={{fontSize:18,fontWeight:700}}>Nueva transacción</div>
-              <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
-            </div>
-            {error&&<div style={{background:C.redLight,border:"1px solid #fca5a5",borderRadius:10,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:16,fontWeight:500}}>{error}</div>}
-            <div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{display:"flex",gap:8}}>
-                {["income","expense"].map(t=>(
-                  <button key={t} onClick={()=>{setType(t);setF("category",t==="income"?"rent":"expensas");}} style={{flex:1,padding:"11px 0",borderRadius:10,border:"1.5px solid "+(type===t?(t==="income"?C.green:C.red):C.border),background:type===t?(t==="income"?C.greenLight:C.redLight):C.white,color:type===t?(t==="income"?C.green:C.red):C.textSec,fontWeight:600,fontSize:14,cursor:"pointer"}}>
-                    {t==="income"?"↑ Ingreso":"↓ Egreso"}
-                  </button>
-                ))}
-              </div>
-              <div><label style={S.label}>Propiedad *</label><select style={S.input} value={form.propertyId} onChange={e=>setF("propertyId",e.target.value)}><option value="">Seleccioná una propiedad</option>{properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-              <div><label style={S.label}>Categoría</label><select style={S.input} value={form.category} onChange={e=>setF("category",e.target.value)}>{CATS[type].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>
-              <div><label style={S.label}>Descripción *</label><input style={S.input} placeholder="Alquiler mayo 2025" value={form.description} onChange={e=>setF("description",e.target.value)}/></div>
-              <div><label style={S.label}>Fecha</label><input type="date" style={S.input} value={form.date} onChange={e=>setF("date",e.target.value)}/></div>
-              <div>
-                <label style={S.label}>Monto en ARS *</label>
-                <input type="number" style={S.input} placeholder="476670" value={amountARS} onChange={e=>setAmountARS(e.target.value)}/>
-                {amountARS>0&&<div style={{fontSize:12,color:C.textSec,marginTop:6}}>≈ <span style={{color:C.green,fontWeight:600}}>{fUSD(arsToUsd(Number(amountARS),tc))}</span> al tipo ${tc.toLocaleString("es-AR")}</div>}
-              </div>
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={save} disabled={saving} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>{saving?"Guardando...":"Guardar"}</button>
-                <button onClick={()=>setShowForm(false)} style={S.btnSec}>Cancelar</button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
