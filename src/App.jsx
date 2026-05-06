@@ -678,15 +678,30 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   const [commBooking,setCommBooking]   = useState(pinnedValues?.commBooking||15);
   const [platform,setPlatform]         = useState("direct");
   const [gastosSaved,setGastosSaved]   = useState(false);
+  const [moneda,setMoneda]             = useState("ARS"); // ARS o USD por gasto
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
-  const totalGastosARS = gastos.reduce((s,g)=>s+g.monto,0);
+
+  // Convertir cada gasto a ARS para operar
+  function gastoEnARS(g) {
+    return g.moneda === "USD" ? Math.round(g.monto * tc) : g.monto;
+  }
+  function gastoEnUSD(g) {
+    return g.moneda === "USD" ? g.monto : arsToUsd(g.monto, tc);
+  }
+
+  const totalGastosARS = gastos.reduce((s,g)=>s+gastoEnARS(g),0);
   const totalGastosUSD = arsToUsd(totalGastosARS,tc);
   const ingresoNecesarioARS = (totalGastosUSD+targetGanancia)*tc;
 
   async function saveGastos() {
     try {
-      const cleanGastos = gastos.map((g,i)=>({ id:i+1, nombre:String(g.nombre||""), monto:Number(g.monto||0) }));
+      const cleanGastos = gastos.map((g,i)=>({
+        id:i+1,
+        nombre:String(g.nombre||""),
+        monto:Number(g.monto||0),
+        moneda:g.moneda||"ARS",
+      }));
       await pinValue("gastos", JSON.stringify(cleanGastos));
       await pinValue("targetGanancia", Number(targetGanancia));
       setGastosSaved(true);
@@ -696,7 +711,7 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
 
   function agregarGasto() {
     if(!nuevoNombre||!nuevoMonto) return;
-    setGastos([...gastos,{id:gastos.length+1,nombre:String(nuevoNombre),monto:Number(nuevoMonto)}]);
+    setGastos([...gastos,{id:gastos.length+1,nombre:String(nuevoNombre),monto:Number(nuevoMonto),moneda}]);
     setNuevoNombre(""); setNuevoMonto(""); setGastosSaved(false);
   }
 
@@ -729,16 +744,16 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
             <div key={key} onClick={()=>setPlatform(key)} style={{
               background:platform===key?C.bg:C.white,
               border:"2px solid "+(platform===key?color:C.border),
-              borderRadius:12, padding:"12px 12px", cursor:"pointer",
+              borderRadius:12, padding:"12px", cursor:"pointer",
             }}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                 <div style={{fontSize:13,fontWeight:700,color}}>{label}</div>
-                {platform===key&&<span style={{fontSize:9,background:color+"22",color,padding:"2px 6px",borderRadius:20,fontWeight:700}}>✓</span>}
+                {platform===key&&<span style={{fontSize:9,background:color+"22",color,padding:"2px 6px",borderRadius:20,fontWeight:700}}>✓ Activo</span>}
               </div>
               {set?(
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <input type="number" value={val} min={0} max={30} onChange={e=>set(Number(e.target.value))}
-                    style={{...S.input,width:50,textAlign:"center",fontWeight:700,fontSize:16,padding:"4px 6px"}}/>
+                    style={{...S.input,width:52,textAlign:"center",fontWeight:700,fontSize:16,padding:"4px 6px"}}/>
                   <span style={{fontSize:13,color:C.textSec}}>%</span>
                   {pinKey&&<PinBtn pinKey={pinKey} value={val} pinnedValues={pinnedValues} pinValue={pinValue}/>}
                 </div>
@@ -750,63 +765,107 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
         </div>
       </div>
 
-      {/* Gastos + Tabla en columnas en desktop, apilado en mobile */}
-      <div className="eq-grid" style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:16}}>
+      <div className="eq-grid" style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:16}}>
 
-        {/* Gastos */}
+        {/* ── GASTOS ─────────────────────────────────────────────────────── */}
         <div style={S.card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:14,fontWeight:700}}>Gastos fijos / mes</div>
             <button onClick={saveGastos} style={{
-              background:gastosSaved?C.green:C.blue, color:"#fff", border:"none",
-              borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:600, cursor:"pointer",
-              display:"flex", alignItems:"center", gap:5,
+              background:gastosSaved?C.green:C.blue,color:"#fff",border:"none",
+              borderRadius:8,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer",
+              display:"flex",alignItems:"center",gap:5,
             }}>
               {gastosSaved?"✓ Guardado":"💾 Guardar"}
             </button>
           </div>
-          <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>Costos del Depto 2 por mes</div>
+          <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>Ingresá en ARS o USD — se convierte automáticamente</div>
+
+          {/* Header columnas */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 90px 50px 30px",gap:6,marginBottom:6,padding:"0 2px"}}>
+            {["Gasto","Monto","USD equiv.",""].map(h=>(
+              <div key={h} style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</div>
+            ))}
+          </div>
 
           <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:12}}>
             {gastos.map(g=>(
-              <div key={g.id} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div key={g.id} style={{display:"grid",gridTemplateColumns:"1fr 90px 50px 30px",gap:6,alignItems:"center"}}>
                 <input value={g.nombre}
                   onChange={e=>{setGastos(gastos.map(x=>x.id===g.id?{...x,nombre:e.target.value}:x));setGastosSaved(false);}}
-                  style={{...S.input,flex:1,fontSize:13,padding:"8px 10px"}}/>
-                <div style={{position:"relative",flexShrink:0}}>
-                  <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontSize:12}}>$</span>
+                  style={{...S.input,fontSize:13,padding:"7px 10px"}}/>
+                {/* Monto con selector de moneda */}
+                <div style={{position:"relative"}}>
+                  <div style={{position:"absolute",left:0,top:0,bottom:0,display:"flex",alignItems:"center",zIndex:1}}>
+                    <select value={g.moneda||"ARS"}
+                      onChange={e=>{setGastos(gastos.map(x=>x.id===g.id?{...x,moneda:e.target.value}:x));setGastosSaved(false);}}
+                      style={{border:"none",background:"transparent",fontSize:10,color:C.blue,fontWeight:700,cursor:"pointer",outline:"none",padding:"0 2px 0 6px",width:38}}>
+                      <option value="ARS">$</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
                   <input type="number" value={g.monto}
                     onChange={e=>{setGastos(gastos.map(x=>x.id===g.id?{...x,monto:Number(e.target.value)}:x));setGastosSaved(false);}}
-                    style={{...S.input,width:96,paddingLeft:18,fontSize:13,padding:"8px 8px 8px 18px"}}/>
+                    style={{...S.input,paddingLeft:40,fontSize:13,padding:"7px 6px 7px 40px"}}/>
+                </div>
+                {/* Equivalente USD */}
+                <div style={{fontSize:11,fontWeight:600,color:C.green,textAlign:"right"}}>
+                  {fUSD(gastoEnUSD(g))}
                 </div>
                 <button onClick={()=>{setGastos(gastos.filter(x=>x.id!==g.id));setGastosSaved(false);}}
-                  style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:30,height:36,cursor:"pointer",fontSize:15,flexShrink:0}}>×</button>
+                  style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:28,height:32,cursor:"pointer",fontSize:15}}>×</button>
               </div>
             ))}
           </div>
 
-          {/* Agregar */}
-          <div style={{display:"flex",gap:6,marginBottom:14,paddingTop:10,borderTop:"1px solid "+C.border}}>
-            <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)}
-              style={{...S.input,flex:1,fontSize:13,padding:"8px 10px"}} placeholder="Nuevo gasto..."/>
-            <div style={{position:"relative",flexShrink:0}}>
-              <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontSize:12}}>$</span>
-              <input type="number" value={nuevoMonto} onChange={e=>setNuevoMonto(e.target.value)}
-                onKeyDown={e=>e.key==="Enter"&&agregarGasto()}
-                style={{...S.input,width:96,paddingLeft:18,fontSize:13,padding:"8px 8px 8px 18px"}} placeholder="0"/>
+          {/* Agregar nuevo gasto */}
+          <div style={{paddingTop:10,borderTop:"1px solid "+C.border,marginBottom:14}}>
+            <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.3px"}}>Agregar gasto</div>
+            <div style={{display:"flex",gap:6,marginBottom:6}}>
+              <input value={nuevoNombre} onChange={e=>setNuevoNombre(e.target.value)}
+                style={{...S.input,flex:1,fontSize:13,padding:"8px 10px"}} placeholder="Nombre del gasto..."/>
             </div>
-            <button onClick={agregarGasto} style={{...S.btnGreen,padding:"8px 12px",flexShrink:0,fontSize:18}}>+</button>
+            <div style={{display:"flex",gap:6}}>
+              {/* Selector moneda nuevo */}
+              <div style={{display:"flex",gap:4}}>
+                {["ARS","USD"].map(m=>(
+                  <button key={m} onClick={()=>setMoneda(m)} style={{
+                    padding:"8px 12px",borderRadius:8,border:"1.5px solid "+(moneda===m?C.blue:C.border),
+                    background:moneda===m?C.blueLight:"transparent",
+                    color:moneda===m?C.blue:C.textSec,
+                    fontSize:12,fontWeight:moneda===m?700:500,cursor:"pointer",
+                  }}>{m}</button>
+                ))}
+              </div>
+              <div style={{position:"relative",flex:1}}>
+                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontSize:12,fontWeight:700}}>
+                  {moneda==="USD"?"USD":"$"}
+                </span>
+                <input type="number" value={nuevoMonto} onChange={e=>setNuevoMonto(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&agregarGasto()}
+                  style={{...S.input,paddingLeft:moneda==="USD"?36:22,fontSize:13,padding:"8px 8px 8px "+(moneda==="USD"?"36px":"22px")}} placeholder="0"/>
+              </div>
+              <button onClick={agregarGasto} style={{...S.btnGreen,padding:"8px 14px",flexShrink:0,fontSize:18,fontWeight:700}}>+</button>
+            </div>
+            {nuevoMonto>0&&(
+              <div style={{fontSize:11,color:C.textSec,marginTop:6}}>
+                {moneda==="ARS"
+                  ? `= ${fUSD(arsToUsd(Number(nuevoMonto),tc))} al TC $${tc.toLocaleString("es-AR")}`
+                  : `= ${fARS(Number(nuevoMonto)*tc)} al TC $${tc.toLocaleString("es-AR")}`}
+              </div>
+            )}
           </div>
 
           {/* Totales */}
           <div style={{background:C.bg,borderRadius:10,padding:12,border:"1px solid "+C.border,marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <span style={{fontSize:13,color:C.textSec}}>Total gastos / mes</span>
-              <span style={{fontSize:14,fontWeight:700,color:C.red}}>{fARS(totalGastosARS)}</span>
+            <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.3px"}}>Total gastos / mes</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:13,color:C.textSec}}>En pesos</span>
+              <span style={{fontSize:15,fontWeight:700,color:C.red}}>{fARS(totalGastosARS)}</span>
             </div>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
-              <span style={{fontSize:13,color:C.textSec}}>En USD</span>
-              <span style={{fontSize:14,fontWeight:700,color:C.red}}>{fUSD(totalGastosUSD)}</span>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:6,borderTop:"1px solid "+C.border}}>
+              <span style={{fontSize:13,color:C.textSec}}>En dólares</span>
+              <span style={{fontSize:18,fontWeight:800,color:C.red}}>{fUSD(totalGastosUSD)}</span>
             </div>
           </div>
 
@@ -826,29 +885,26 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
           </div>
         </div>
 
-        {/* Tabla de escenarios */}
+        {/* ── TABLA ESCENARIOS ──────────────────────────────────────────── */}
         <div style={S.card}>
           <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>¿Cuánto cobrar por noche?</div>
           <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>
             Plataforma: <strong>{platform==="direct"?"Directa":platform==="airbnb"?"Airbnb":"Booking"}</strong>
             {commPct>0&&<span style={{color:C.red}}> (−{commPct}%)</span>}
           </div>
-
-          {/* Header tabla */}
-          <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 60px",gap:8,padding:"6px 10px",marginBottom:4}}>
-            {["Noches","Precio/noche","Ingreso neto","Ganancia",""].map(h=>(
-              <div key={h} style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</div>
+          <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 80px 50px",gap:8,padding:"6px 10px",marginBottom:4}}>
+            {["Noches","Precio/noche","Ing. neto","Ganancia",""].map(h=>(
+              <div key={h} style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</div>
             ))}
           </div>
-
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {escenarios.map(e=>{
               const esRentable=e.gananciaUSD>=targetGanancia*0.9;
               const esOptimo=e.noches===12;
               return (
                 <div key={e.noches} style={{
-                  display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 60px",
-                  alignItems:"center",gap:8,padding:"10px 10px",borderRadius:10,
+                  display:"grid",gridTemplateColumns:"50px 1fr 1fr 80px 50px",
+                  alignItems:"center",gap:8,padding:"10px",borderRadius:10,
                   background:esOptimo?C.bg:"transparent",
                   border:"1px solid "+(esOptimo?C.borderMed:C.border),
                 }}>
@@ -858,23 +914,26 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
                   </div>
                   <div>
                     <div style={{fontSize:13,fontWeight:700}}>{fARS(e.brutoNecesario)}</div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{fUSD(arsToUsd(e.brutoNecesario,tc))}</div>
                     {commPct>0&&<div style={{fontSize:10,color:C.red}}>Com: {fARS(e.comision)}</div>}
                   </div>
                   <div>
                     <div style={{fontSize:13,fontWeight:600}}>{fARS(e.ingresoNeto)}</div>
                     <div style={{fontSize:10,color:C.textMuted}}>{e.ocupacion}% ocup.</div>
                   </div>
-                  <div style={{fontSize:14,fontWeight:700,color:esRentable?C.green:C.red}}>{fUSD(e.gananciaUSD)}</div>
-                  <div style={{textAlign:"right"}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:800,color:esRentable?C.green:C.red}}>{fUSD(e.gananciaUSD)}</div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{fARS(e.gananciaUSD*tc)}</div>
+                  </div>
+                  <div style={{textAlign:"center"}}>
                     {esRentable
-                      ?<span style={{fontSize:11,background:C.greenLight,color:C.green,padding:"3px 7px",borderRadius:20,fontWeight:600}}>✓</span>
-                      :<span style={{fontSize:11,background:C.redLight,color:C.red,padding:"3px 7px",borderRadius:20,fontWeight:600}}>✗</span>}
+                      ?<span style={{fontSize:13,background:C.greenLight,color:C.green,padding:"4px 8px",borderRadius:20,fontWeight:700}}>✓</span>
+                      :<span style={{fontSize:13,background:C.redLight,color:C.red,padding:"4px 8px",borderRadius:20,fontWeight:700}}>✗</span>}
                   </div>
                 </div>
               );
             })}
           </div>
-
           <div style={{marginTop:14,padding:"12px 14px",background:C.blueLight,borderRadius:12}}>
             <div style={{fontSize:13,fontWeight:600,color:C.blueMid,marginBottom:3}}>💡 Recomendación</div>
             <div style={{fontSize:13,color:C.blue}}>
@@ -882,6 +941,180 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
               {commPct>0&&` Recordá la comisión del ${commPct}% de ${platform==="airbnb"?"Airbnb":"Booking"}.`}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── EVALUACIÓN DE NUEVA PROPIEDAD ────────────────────────────────── */}
+      <div style={{...S.card,marginTop:16,borderTop:"3px solid "+C.blue}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+          <span style={{fontSize:22}}>🔍</span>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:C.blue}}>Análisis de nueva oportunidad de inversión</div>
+            <div style={{fontSize:12,color:C.textSec}}>Basado en análisis económico · Ciudad intermedia Argentina</div>
+          </div>
+        </div>
+        <EvaluacionPropiedad tc={tc}/>
+      </div>
+    </div>
+  );
+}
+
+// ── EVALUACIÓN DE PROPIEDAD ───────────────────────────────────────────────────
+function EvaluacionPropiedad({ tc }) {
+  const [precioLista,setPrecioLista]     = useState(60000);
+  const [descuento,setDescuento]         = useState(8);
+  const [gastosAdq,setGastosAdq]         = useState(7);
+  const [amoblamiento,setAmoblamiento]   = useState(4000);
+  const [tarifaNoche,setTarifaNoche]     = useState(30);
+  const [ocupacion,setOcupacion]         = useState(55);
+  const [costoVar,setCostoVar]           = useState(15);
+  const [expensasUSD,setExpensasUSD]     = useState(80);
+
+  const precioCierre  = Math.round(precioLista * (1 - descuento/100));
+  const gastosAdqUSD  = Math.round(precioCierre * gastosAdq/100);
+  const invTotal      = precioCierre + gastosAdqUSD + amoblamiento;
+  const nochesOcup    = Math.round(30 * ocupacion/100 * 10)/10;
+  const ingresoBrutoMes = nochesOcup * tarifaNoche;
+  const costosVarMes  = Math.round(ingresoBrutoMes * costoVar/100);
+  const noiMes        = ingresoBrutoMes - costosVarMes - expensasUSD;
+  const noiAnual      = noiMes * 12;
+  const capRate       = invTotal>0 ? (noiAnual/precioCierre)*100 : 0;
+  const cashOnCash    = invTotal>0 ? (noiAnual/invTotal)*100 : 0;
+  const payback       = noiMes>0 ? invTotal/(noiMes*12) : null;
+  const irr           = calcIRR(invTotal, noiAnual, invTotal*1.2, 20);
+
+  // Sensibilidad
+  const noiMesPes  = Math.round((nochesOcup*0.85)*tarifaNoche*(1-costoVar/100)) - expensasUSD;
+  const noiMesOpt  = Math.round(nochesOcup*tarifaNoche*1.1*(1-costoVar/100)) - expensasUSD;
+  const capRatePes = precioCierre>0?(noiMesPes*12/precioCierre)*100:0;
+  const capRateOpt = precioCierre>0?(noiMesOpt*12/precioCierre)*100:0;
+  const paybackPes = noiMesPes>0?invTotal/(noiMesPes*12):null;
+  const paybackOpt = noiMesOpt>0?invTotal/(noiMesOpt*12):null;
+
+  const veredicto = capRate>=6 && cashOnCash>=5 && payback && payback<=18;
+
+  return (
+    <div>
+      {/* Inputs */}
+      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20,marginTop:16}}>
+        {[
+          {label:"Precio de lista (USD)",      val:precioLista,  set:setPrecioLista,  prefix:"USD"},
+          {label:"Descuento negociación (%)",   val:descuento,    set:setDescuento,    suffix:"%"},
+          {label:"Gastos adquisición (%)",      val:gastosAdq,    set:setGastosAdq,    suffix:"%"},
+          {label:"Amoblamiento/puesta a punto", val:amoblamiento, set:setAmoblamiento, prefix:"USD"},
+          {label:"Tarifa promedio/noche",       val:tarifaNoche,  set:setTarifaNoche,  prefix:"USD"},
+          {label:"Ocupación mensual (%)",       val:ocupacion,    set:setOcupacion,    suffix:"%"},
+          {label:"Costos operativos var. (%)",  val:costoVar,     set:setCostoVar,     suffix:"%"},
+          {label:"Expensas + impuestos/mes",    val:expensasUSD,  set:setExpensasUSD,  prefix:"USD"},
+        ].map(({label,val,set,prefix,suffix})=>(
+          <div key={label} style={{background:C.bg,borderRadius:10,padding:12}}>
+            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>{label}</div>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              {prefix&&<span style={{fontSize:12,color:C.textSec,fontWeight:600}}>{prefix}</span>}
+              <input type="number" value={val} onChange={e=>set(Number(e.target.value))}
+                style={{...S.input,fontSize:15,fontWeight:700,padding:"6px 8px"}}/>
+              {suffix&&<span style={{fontSize:12,color:C.textSec}}>{suffix}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Resumen inversión */}
+      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>Inversión total</div>
+          <div style={{fontSize:22,fontWeight:800,color:C.text}}>{fUSD(invTotal)}</div>
+          <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>Cierre {fUSD(precioCierre)} + adq. {fUSD(gastosAdqUSD)} + amob. {fUSD(amoblamiento)}</div>
+        </div>
+        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>NOI mensual</div>
+          <div style={{fontSize:22,fontWeight:800,color:noiMes>0?C.green:C.red}}>{fUSD(noiMes)}</div>
+          <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>{nochesOcup} noches · {fUSD(ingresoBrutoMes)} bruto</div>
+        </div>
+        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+          <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>NOI anual</div>
+          <div style={{fontSize:22,fontWeight:800,color:noiAnual>0?C.green:C.red}}>{fUSD(noiAnual)}</div>
+          <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>{fARS(noiAnual*tc)} ARS/año</div>
+        </div>
+      </div>
+
+      {/* Métricas clave */}
+      <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {label:"Cap Rate",       value:fPct(capRate),    color:capRate>=6?C.green:capRate>=4?C.yellow:C.red,    ref:"Ref: >6% excelente"},
+          {label:"Cash-on-Cash",   value:fPct(cashOnCash), color:cashOnCash>=5?C.green:cashOnCash>=3?C.yellow:C.red, ref:"Ref: >5% bueno"},
+          {label:"Payback",        value:payback?payback.toFixed(1)+" años":"N/A", color:payback&&payback<=18?C.green:C.yellow, ref:"Ref: <18 años OK"},
+          {label:"TIR estimada",   value:fPct(irr),        color:irr>=7?C.green:irr>=4?C.yellow:C.red,           ref:"Ref: >7% excelente"},
+        ].map(({label,value,color,ref})=>(
+          <div key={label} style={{...S.card,borderTop:"3px solid "+color,padding:16}}>
+            <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:8}}>{label}</div>
+            <div style={{fontSize:24,fontWeight:800,color}}>{value}</div>
+            <div style={{fontSize:10,color:C.textMuted,marginTop:4}}>{ref}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sensibilidad */}
+      <div style={{...S.card,marginBottom:16,padding:0,overflow:"hidden"}}>
+        <div style={{padding:"14px 18px",borderBottom:"1px solid "+C.border,background:C.bg}}>
+          <div style={{fontSize:14,fontWeight:700}}>Análisis de sensibilidad</div>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{borderBottom:"1px solid "+C.border,background:C.bg}}>
+              {["Escenario","Ocupación","Tarifa","NOI/mes","Cap Rate","Payback"].map(h=>(
+                <th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              {label:"Base",          color:C.blue,   bg:C.blueLight,  noi:noiMes,    cr:capRate,    pb:payback,    ocup:ocupacion,    tarifa:tarifaNoche},
+              {label:"Pesimista −15%",color:C.red,    bg:C.redLight,   noi:noiMesPes, cr:capRatePes, pb:paybackPes, ocup:Math.round(ocupacion*0.85), tarifa:tarifaNoche},
+              {label:"Optimista +10%",color:C.green,  bg:C.greenLight, noi:noiMesOpt, cr:capRateOpt, pb:paybackOpt, ocup:ocupacion,    tarifa:Math.round(tarifaNoche*1.1)},
+            ].map(({label,color,bg,noi,cr,pb,ocup,tarifa})=>(
+              <tr key={label} style={{borderBottom:"1px solid "+C.border}}>
+                <td style={{padding:"12px 14px"}}>
+                  <span style={{background:bg,color,padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>{label}</span>
+                </td>
+                <td style={{padding:"12px 14px",color:C.textSec}}>{ocup}%</td>
+                <td style={{padding:"12px 14px",color:C.textSec}}>USD {tarifa}</td>
+                <td style={{padding:"12px 14px",fontWeight:700,color:noi>0?C.green:C.red}}>{fUSD(noi)}</td>
+                <td style={{padding:"12px 14px",fontWeight:600,color:cr>=6?C.green:cr>=4?C.yellow:C.red}}>{fPct(cr)}</td>
+                <td style={{padding:"12px 14px",color:pb&&pb<=18?C.green:C.yellow}}>{pb?pb.toFixed(1)+" años":"N/A"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Veredicto */}
+      <div style={{
+        borderRadius:16, padding:20,
+        background:veredicto?"linear-gradient(135deg,#d1fae5,#a7f3d0)":"linear-gradient(135deg,#fee2e2,#fecaca)",
+        border:"2px solid "+(veredicto?C.green:C.red),
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <div style={{
+            fontSize:28, fontWeight:900,
+            background:veredicto?C.green:C.red,
+            color:"#fff", padding:"8px 20px", borderRadius:12,
+          }}>
+            {veredicto?"✓ GO":"✗ NO GO"}
+          </div>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:veredicto?C.green:C.red}}>
+              {veredicto?"Inversión viable — considerá contraofertar":"Revisar supuestos o buscar mejor precio"}
+            </div>
+            <div style={{fontSize:12,color:veredicto?"#065f46":"#991b1b",marginTop:2}}>
+              Precio de cierre estimado: {fUSD(precioCierre)} · Inversión total: {fUSD(invTotal)}
+            </div>
+          </div>
+        </div>
+        <div style={{fontSize:13,color:veredicto?"#065f46":"#7f1d1d",lineHeight:1.7}}>
+          {veredicto
+            ? `Cap Rate ${fPct(capRate)} por encima del benchmark del mercado. NOI ${fUSD(noiMes)}/mes cubre cómodamente los costos. Contraofertar ${fPct(descuento)} de descuento es razonable — si aceptan, el retorno mejora. Verificar reglamento del edificio para alquiler temporario y ocupación real de la zona antes de firmar.`
+            : `Con los números actuales el Cap Rate ${fPct(capRate)} está por debajo del mínimo aceptable (6%) o el payback supera los 18 años. Ajustá el precio de compra, la tarifa por noche, o la ocupación esperada para mejorar la viabilidad.`}
         </div>
       </div>
     </div>
