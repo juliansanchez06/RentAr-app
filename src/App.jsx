@@ -515,14 +515,25 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
   return (
     <div style={{ animation:"fadeIn 0.25s ease" }}>
-      <div style={{ marginBottom:32 }}>
-        <h1 style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.5px" }}>
-          {now.getHours()<12?"Buenos días":now.getHours()<19?"Buenas tardes":"Buenas noches"} 👋
-        </h1>
-        <p style={{ color:C.textSec, fontSize:14, marginTop:5 }}>
-          {now.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
-          {" · "}<span style={{ color:C.green, fontWeight:600 }}>TC ${tc.toLocaleString("es-AR")}</span>
-        </p>
+      <div style={{marginBottom:28,display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>
+            ● Portfolio activo
+          </div>
+          <h1 style={{fontSize:32,fontWeight:900,letterSpacing:"-1px",margin:0,lineHeight:1.1}}>
+            {now.getHours()<12?"Buenos días":"Buenas tardes"}{" "}
+            <span style={{background:"linear-gradient(135deg,#1e3a6e,#3b82f6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Julian</span> 👋
+          </h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:6}}>
+            {now.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
+            {" · "}TC <span style={{color:C.green,fontWeight:700}}>${tc.toLocaleString("es-AR")}</span>
+          </p>
+        </div>
+        <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Portfolio total</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fUSD(properties.reduce((s,p)=>s+(p.estimatedValueUSD||0),0)||124000)}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{properties.length} propiedad{properties.length!==1?"es":""} activa{properties.length!==1?"s":""}</div>
+        </div>
       </div>
 
       <div className="grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
@@ -752,8 +763,11 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
       <div style={{marginBottom:24}}>
-        <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Punto de equilibrio</h1>
-        <p style={{color:C.textSec,fontSize:14,marginTop:5}}>Depto 2 · ¿Cuánto cobrar y cuántas noches necesitás?</p>
+        <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>⚖ Rentabilidad · Depto 2</div>
+        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>
+          ¿A cuánto alquilar <span style={{color:C.blue}}>por noche</span>?
+        </h1>
+        <p style={{color:C.textSec,fontSize:13,marginTop:6}}>Calculá tu precio ideal según gastos, ocupación y ganancia deseada</p>
       </div>
 
       {/* Comisiones */}
@@ -1200,12 +1214,15 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:32}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
         <div>
-          <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Propiedades</h1>
-          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>{properties.length} inmuebles en el portfolio</p>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>🏠 Mi portfolio</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Propiedades</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{properties.length} inmuebles · Cap Rate y Payback en tiempo real</p>
         </div>
-        <button onClick={()=>setShowForm(true)} style={S.btn}>+ Nueva propiedad</button>
+        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#1e3a6e,#2563eb)",boxShadow:"0 4px 14px rgba(37,99,235,0.3)"}}>
+          + Nueva propiedad
+        </button>
       </div>
 
       {properties.length===0?(
@@ -1469,10 +1486,11 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:32}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
         <div>
-          <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Reservas</h1>
-          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>Calendario · Renta temporal</p>
+          <div style={{fontSize:11,fontWeight:700,color:C.yellow,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>📅 Renta temporal</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Reservas</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>Calendario de ocupación · Gestión de huéspedes</p>
         </div>
         <div style={{display:"flex",gap:10}}>
           {shortProps.length>1&&<select style={{...S.input,width:200}} value={propId} onChange={e=>setPropId(e.target.value)}>{shortProps.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}
@@ -1646,12 +1664,15 @@ function Transactions({ properties, transactions, tc, reload, db }) {
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:32}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
         <div>
-          <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Transacciones</h1>
-          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>{transactions.length} registros</p>
+          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>💳 Ingresos y egresos</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Transacciones</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{transactions.length} registros · ARS convertido a USD</p>
         </div>
-        <button onClick={()=>setShowForm(true)} style={S.btn}>+ Nueva transacción</button>
+        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#059669,#10b981)",boxShadow:"0 4px 14px rgba(5,150,105,0.3)"}}>
+          + Nueva transacción
+        </button>
       </div>
 
       <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
@@ -1765,9 +1786,10 @@ function Movimientos({ db }) {
 
   return (
     <div style={{ animation:"fadeIn 0.25s ease" }}>
-      <div style={{ marginBottom:32 }}>
-        <h1 style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.5px" }}>Movimientos</h1>
-        <p style={{ color:C.textSec, fontSize:14, marginTop:5 }}>Historial de reservas eliminadas</p>
+      <div style={{marginBottom:28}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>🗂 Historial</div>
+        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Movimientos</h1>
+        <p style={{color:C.textSec,fontSize:13,marginTop:5}}>Registro de reservas canceladas · Trazabilidad completa</p>
       </div>
 
       {loading ? (
@@ -1903,8 +1925,9 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
     <div style={{animation:"fadeIn 0.25s ease"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
         <div>
-          <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Análisis financiero</h1>
-          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>TIR · Payback · Escenarios · Revalorización</p>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>📊 Inteligencia financiera</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Análisis</h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:5}}>TIR · Payback · Escenarios cambiarios · Revalorización</p>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <select style={{...S.input,width:190}} value={propId} onChange={e=>setPropId(e.target.value)}>
