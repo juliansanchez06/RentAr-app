@@ -1464,36 +1464,103 @@ function Movimientos({ db }) {
 
 // ── ANÁLISIS ──────────────────────────────────────────────────────────────────
 function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
-  const [propId,setPropId]=useState("all");
-  const [years,setYears]=useState(pinnedValues?.projYears||20);
+  const [propId,setPropId]       = useState("all");
+  const [years,setYears]         = useState(pinnedValues?.projYears||20);
+  const [tab,setTab]             = useState("flujo"); // flujo | escenarios | revalorizacion
 
-  const props=propId==="all"?properties:properties.filter(p=>p.id===propId);
-  const txs=propId==="all"?transactions:transactions.filter(t=>t.propertyId===propId);
-  const totalVal=props.reduce((s,p)=>s+p.estimatedValueUSD,0);
-  const grossInc=txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amountUSD,0)/3;
-  const expenses=txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amountUSD,0)/3;
-  const netInc=grossInc-expenses, annualNet=netInc*12;
-  const grossY=totalVal>0?(grossInc*12/totalVal)*100:0;
-  const netY=totalVal>0?(annualNet/totalVal)*100:0;
-  const irr=calcIRR(totalVal,annualNet,totalVal,years);
+  // Escenarios
+  const [infARS,setInfARS]       = useState(80);   // inflación ARS anual %
+  const [infUSD,setInfUSD]       = useState(3);    // inflación USD anual %
+  const [ajusteContrato,setAjusteContrato] = useState(70); // % de inflación que cubre el ajuste
+  const [escenario,setEscenario] = useState("estable"); // estable | devaluacion | atraso
 
-  const projection=Array.from({length:years},(_,i)=>{
-    const year=i+1,cum=-totalVal+annualNet*year;
+  // Revalorización
+  const [aprecAnual,setAprecAnual] = useState(3);  // % anual de suba del inmueble en USD
+  const [anosVenta,setAnosVenta]   = useState(10); // en cuántos años se vende
+
+  const props    = propId==="all" ? properties : properties.filter(p=>p.id===propId);
+  const txs      = propId==="all" ? transactions : transactions.filter(t=>t.propertyId===propId);
+  const totalVal = props.reduce((s,p)=>s+p.estimatedValueUSD,0);
+  const grossInc = txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amountUSD,0)/3;
+  const expenses = txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amountUSD,0)/3;
+  const netInc   = grossInc - expenses;
+  const annualNet= netInc * 12;
+  const grossY   = totalVal>0 ? (grossInc*12/totalVal)*100 : 0;
+  const netY     = totalVal>0 ? (annualNet/totalVal)*100 : 0;
+  const irr      = calcIRR(totalVal, annualNet, totalVal, years);
+
+  // ── Proyección base ──────────────────────────────────────────────────────────
+  const projection = Array.from({length:years},(_,i)=>{
+    const year=i+1, cum=-totalVal+annualNet*year;
     return {year,cum:Math.round(cum),net:Math.round(annualNet),inc:Math.round(grossInc*12),exp:Math.round(expenses*12),recovered:cum>=0};
   });
-  const pbYear=projection.find(r=>r.recovered)?.year;
-  const maxAbs=Math.max(...projection.map(r=>Math.abs(r.cum)),1);
-  const pricingExamples=[1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,15000,0)}));
+  const pbYear  = projection.find(r=>r.recovered)?.year;
+  const maxAbs  = Math.max(...projection.map(r=>Math.abs(r.cum)),1);
+
+  // ── Escenarios cambiarios ────────────────────────────────────────────────────
+  function calcEscenario(tipo) {
+    // Factor de ajuste del ingreso en USD según escenario
+    let tcFactor = 1;
+    if (tipo === "devaluacion") tcFactor = 0.65;      // TC salta 50% → ingreso USD cae
+    if (tipo === "atraso")      tcFactor = 1.25;      // TC quieto, inflación alta → ingreso USD sube
+    
+    // Ajuste del contrato en pesos
+    const ajusteEfectivo = (infARS * ajusteContrato / 100) / 100; // ajuste anual en pesos
+    
+    // Proyección con escenario
+    return Array.from({length:years},(_,i)=>{
+      const year = i+1;
+      // El ingreso en pesos crece con el ajuste del contrato
+      const incARS_factor = Math.pow(1 + ajusteEfectivo, year);
+      // El TC según escenario (después del shock inicial, tiende a normalizarse)
+      const tcFactorYear = tipo === "devaluacion"
+        ? (year === 1 ? 0.65 : Math.min(1, 0.65 + (year-1)*0.08)) // recuperación gradual
+        : tipo === "atraso"
+        ? Math.min(1.4, 1 + year*0.05)  // atraso se acumula
+        : 1;
+      
+      const netYear = netInc * incARS_factor * tcFactorYear;
+      const cum = -totalVal + netYear * 12 * year;
+      return {year, netUSD: Math.round(netYear), cum: Math.round(cum), recovered: cum >= 0};
+    });
+  }
+
+  const escBase       = calcEscenario("estable");
+  const escDevaluacion = calcEscenario("devaluacion");
+  const escAtraso     = calcEscenario("atraso");
+
+  const irrEscBase  = calcIRR(totalVal, escBase[0].netUSD*12,       totalVal, years);
+  const irrEscDev   = calcIRR(totalVal, escDevaluacion[0].netUSD*12, totalVal, years);
+  const irrEscAtraso = calcIRR(totalVal, escAtraso[0].netUSD*12,    totalVal, years);
+
+  // ── Revalorización ───────────────────────────────────────────────────────────
+  const valorFuturo   = totalVal * Math.pow(1 + aprecAnual/100, anosVenta);
+  const plusvaliaFut  = valorFuturo - totalVal;
+  const rentaAcum     = annualNet * anosVenta;
+  const retornoTotal  = rentaAcum + plusvaliaFut;
+  const retornoPct    = totalVal>0 ? (retornoTotal/totalVal)*100 : 0;
+  const irrConApreciac = calcIRR(totalVal, annualNet, valorFuturo, anosVenta);
+
+  // Real USD ajustado por inflación americana
+  const irrReal = irr - infUSD;
+
+  const pricingExamples = [1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,15000,0)}));
+
+  const TABS = [
+    {id:"flujo",         label:"Flujo de caja"},
+    {id:"escenarios",    label:"Escenarios cambiarios"},
+    {id:"revalorizacion",label:"Revalorización"},
+  ];
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:32}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
         <div>
           <h1 style={{fontSize:26,fontWeight:800,letterSpacing:"-0.5px"}}>Análisis financiero</h1>
-          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>TIR · Payback · Cap Rate · Flujo de caja</p>
+          <p style={{color:C.textSec,fontSize:14,marginTop:5}}>TIR · Payback · Escenarios · Revalorización</p>
         </div>
-        <div style={{display:"flex",gap:10,alignItems:"center"}}>
-          <select style={{...S.input,width:200}} value={propId} onChange={e=>setPropId(e.target.value)}>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <select style={{...S.input,width:190}} value={propId} onChange={e=>setPropId(e.target.value)}>
             <option value="all">Todo el portfolio</option>
             {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -1505,118 +1572,375 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24}}>
+      {/* KPIs */}
+      <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:24}}>
         {[
-          {label:"Cap Rate",          value:fPct(netY),  color:netY>4?C.green:C.yellow},
-          {label:"TIR",               value:fPct(irr),   color:irr>6?C.green:irr>3?C.yellow:C.red},
-          {label:"Rentabilidad neta", value:fPct(netY),  color:C.text},
+          {label:"Cap Rate",          value:fPct(netY),     color:netY>4?C.green:C.yellow},
+          {label:"TIR nominal",       value:fPct(irr),      color:irr>6?C.green:irr>3?C.yellow:C.red},
+          {label:"TIR real (−inf USD)",value:fPct(Math.max(irrReal,0)), color:irrReal>3?C.green:C.yellow},
           {label:"Payback",           value:pbYear?"Año "+pbYear:"N/A", color:pbYear?C.green:C.red},
         ].map(({label,value,color})=>(
           <div key={label} style={S.card}>
             <div style={{fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",textTransform:"uppercase",marginBottom:10}}>{label}</div>
-            <div style={{fontSize:28,fontWeight:800,color,letterSpacing:"-0.5px"}}>{value}</div>
+            <div style={{fontSize:26,fontWeight:800,color,letterSpacing:"-0.5px"}}>{value}</div>
           </div>
         ))}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
-        <div style={S.card}>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>Flujo mensual (USD)</div>
-          {[
-            {label:"Ingreso bruto / mes",value:fUSD(grossInc)},
-            {label:"Egresos / mes",      value:"− "+fUSD(expenses),color:C.red},
-            {label:"Ingreso neto / mes", value:fUSD(netInc),      color:C.green},
-            {label:"Ingreso neto / año", value:fUSD(annualNet),    color:C.green,big:true},
-          ].map(({label,value,color,big})=>(
-            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
-              <span style={{fontSize:13,color:C.textSec}}>{label}</span>
-              <span style={{fontSize:big?18:14,fontWeight:big?800:600,color:color||C.text}}>{value}</span>
-            </div>
-          ))}
-        </div>
-        <div style={S.card}>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>Rentabilidad</div>
-          {[
-            {label:"Rentabilidad bruta", value:fPct(grossY)},
-            {label:"Rentabilidad neta",  value:fPct(netY)},
-            {label:"Cap Rate",           value:fPct(netY)},
-            {label:"TIR",                value:fPct(irr),color:irr>6?C.green:C.yellow,big:true},
-          ].map(({label,value,color,big})=>(
-            <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
-              <span style={{fontSize:13,color:C.textSec}}>{label}</span>
-              <span style={{fontSize:big?18:14,fontWeight:big?800:600,color:color||C.text}}>{value}</span>
-            </div>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div style={{display:"flex",gap:4,marginBottom:20,borderBottom:"1px solid "+C.border,paddingBottom:0}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            padding:"10px 18px",border:"none",background:"transparent",cursor:"pointer",
+            fontSize:13,fontWeight:tab===t.id?700:400,
+            color:tab===t.id?C.blue:C.textSec,
+            borderBottom:tab===t.id?"2px solid "+C.blue:"2px solid transparent",
+            marginBottom:"-1px",
+          }}>{t.label}</button>
+        ))}
       </div>
 
-      <div style={{...S.card,marginBottom:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <div>
-            <div style={{fontSize:15,fontWeight:700}}>Proyección · {years} años</div>
-            <div style={{fontSize:12,color:C.textSec,marginTop:2}}>Acumulado neto en USD</div>
+      {/* ── TAB: FLUJO DE CAJA ──────────────────────────────────────────────── */}
+      {tab==="flujo"&&(
+        <div>
+          <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18,marginBottom:18}}>
+            <div style={S.card}>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>Flujo mensual (USD)</div>
+              {[
+                {label:"Ingreso bruto / mes",value:fUSD(grossInc)},
+                {label:"Egresos / mes",      value:"− "+fUSD(expenses),color:C.red},
+                {label:"Ingreso neto / mes", value:fUSD(netInc),       color:C.green},
+                {label:"Ingreso neto / año", value:fUSD(annualNet),     color:C.green,big:true},
+              ].map(({label,value,color,big})=>(
+                <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
+                  <span style={{fontSize:13,color:C.textSec}}>{label}</span>
+                  <span style={{fontSize:big?18:14,fontWeight:big?800:600,color:color||C.text}}>{value}</span>
+                </div>
+              ))}
+            </div>
+            <div style={S.card}>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:18}}>Rentabilidad</div>
+              {[
+                {label:"Rentabilidad bruta anual", value:fPct(grossY)},
+                {label:"Rentabilidad neta anual",  value:fPct(netY)},
+                {label:"TIR nominal",               value:fPct(irr),   color:irr>6?C.green:C.yellow},
+                {label:"TIR real (descontando "+infUSD+"% inf. USD)", value:fPct(Math.max(irrReal,0)), color:irrReal>3?C.green:C.yellow, big:true},
+              ].map(({label,value,color,big})=>(
+                <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
+                  <span style={{fontSize:13,color:C.textSec}}>{label}</span>
+                  <span style={{fontSize:big?18:14,fontWeight:big?800:600,color:color||C.text}}>{value}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          {pbYear&&<span style={{background:C.greenLight,color:C.green,padding:"6px 14px",borderRadius:20,fontSize:13,fontWeight:700}}>Recupero año {pbYear}</span>}
-        </div>
-        <div style={{display:"flex",alignItems:"flex-end",gap:4,height:130,marginBottom:16}}>
-          {projection.map((r,i)=>{
-            const pct=Math.abs(r.cum)/maxAbs*100;
-            const isPayback=r.recovered&&!projection[i-1]?.recovered;
-            return (
-              <div key={r.year} style={{flex:1,height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:4}}>
-                <div title={`Año ${r.year}: ${fUSD(r.cum)}`} style={{width:"100%",height:Math.max(pct,3)+"%",borderRadius:"4px 4px 0 0",background:isPayback?C.green:r.recovered?C.greenLight:"#fde8e8",border:isPayback?"1px solid "+C.green:"none",transition:"height 0.4s"}}/>
-                {(r.year===1||r.year%5===0)&&<span style={{fontSize:9,color:C.textMuted}}>{r.year}</span>}
-              </div>
-            );
-          })}
-        </div>
-        {pbYear&&<div style={{background:C.greenLight,borderRadius:12,padding:"12px 16px"}}><span style={{color:C.green,fontWeight:600,fontSize:13}}>✓ Recupero en año {pbYear} · TIR {fPct(irr)} anual · Neto {fUSD(netInc)}/mes</span></div>}
-      </div>
 
-      <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:18}}>
-        <div style={{padding:"18px 24px",borderBottom:"1px solid "+C.border}}><div style={{fontSize:15,fontWeight:700}}>Tabla de flujo de caja</div></div>
-        <div style={{maxHeight:280,overflowY:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-            <thead style={{position:"sticky",top:0,background:C.bg}}>
-              <tr style={{borderBottom:"1px solid "+C.border}}>
-                {["Año","Ingresos","Egresos","Neto","Acumulado"].map(h=><th key={h} style={{padding:"10px 18px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",textTransform:"uppercase"}}>{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {projection.map(r=>{
-                const isPayback=r.recovered&&!projection[r.year-2]?.recovered;
+          {/* Gráfico proyección */}
+          <div style={{...S.card,marginBottom:18}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700}}>Proyección acumulada · {years} años</div>
+                <div style={{fontSize:12,color:C.textSec,marginTop:2}}>Acumulado neto en USD</div>
+              </div>
+              {pbYear&&<span style={{background:C.greenLight,color:C.green,padding:"6px 14px",borderRadius:20,fontSize:13,fontWeight:700}}>Recupero año {pbYear}</span>}
+            </div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:4,height:130,marginBottom:16}}>
+              {projection.map((r,i)=>{
+                const pct=Math.abs(r.cum)/maxAbs*100;
+                const isPayback=r.recovered&&!projection[i-1]?.recovered;
                 return (
-                  <tr key={r.year} style={{borderBottom:"1px solid "+C.border,background:isPayback?C.greenLight:"transparent"}}>
-                    <td style={{padding:"10px 18px",color:C.textSec}}>Año {r.year}</td>
-                    <td style={{padding:"10px 18px",color:C.green,fontWeight:500}}>{fUSD(r.inc)}</td>
-                    <td style={{padding:"10px 18px",color:C.red,fontWeight:500}}>−{fUSD(r.exp)}</td>
-                    <td style={{padding:"10px 18px",fontWeight:600}}>{fUSD(r.net)}</td>
-                    <td style={{padding:"10px 18px",fontWeight:700,color:r.cum>=0?C.green:C.red}}>
-                      {r.cum>=0?"+":""}{fUSD(r.cum)}
-                      {isPayback&&<span style={{marginLeft:10,background:C.green,color:"#fff",fontSize:10,padding:"2px 8px",borderRadius:20,fontWeight:700}}>Recupero</span>}
-                    </td>
-                  </tr>
+                  <div key={r.year} style={{flex:1,height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:4}}>
+                    <div title={"Año "+r.year+": "+fUSD(r.cum)} style={{width:"100%",height:Math.max(pct,3)+"%",borderRadius:"4px 4px 0 0",background:isPayback?C.green:r.recovered?C.greenLight:"#fde8e8",border:isPayback?"1px solid "+C.green:"none",transition:"height 0.4s"}}/>
+                    {(r.year===1||r.year%5===0)&&<span style={{fontSize:9,color:C.textMuted}}>{r.year}</span>}
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div style={S.card}>
-        <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Pricing dinámico · Depto 2</div>
-        <div style={{fontSize:12,color:C.textSec,marginBottom:18}}>Base $70.000/noche · Fee limpieza $15.000 · Sin comisión</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
-          {pricingExamples.map(({nights,total,perNight,label})=>(
-            <div key={nights} style={{background:nights===1?C.yellowLight:nights>=7?C.greenLight:C.bg,border:"1px solid "+(nights===1?C.yellow+"44":nights>=7?C.green+"44":C.border),borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
-              <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>{nights} {nights===1?"noche":"noches"}</div>
-              <div style={{fontSize:15,fontWeight:800,color:nights===1?C.yellow:nights>=7?C.green:C.text}}>{fARS(total)}</div>
-              <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{fARS(perNight)}/n</div>
-              {(nights===1||nights>=7)&&<div style={{fontSize:9,marginTop:4,fontWeight:700,color:nights===1?C.yellow:C.green}}>{nights===1?"+20%":"-10%"}</div>}
             </div>
-          ))}
+            {pbYear&&<div style={{background:C.greenLight,borderRadius:12,padding:"12px 16px"}}><span style={{color:C.green,fontWeight:600,fontSize:13}}>✓ Recupero en año {pbYear} · TIR {fPct(irr)} nominal · TIR real {fPct(Math.max(irrReal,0))} · Neto {fUSD(netInc)}/mes</span></div>}
+          </div>
+
+          {/* Tabla flujo */}
+          <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:18}}>
+            <div style={{padding:"18px 24px",borderBottom:"1px solid "+C.border}}><div style={{fontSize:15,fontWeight:700}}>Tabla de flujo de caja</div></div>
+            <div style={{maxHeight:280,overflowY:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead style={{position:"sticky",top:0,background:C.bg}}>
+                  <tr style={{borderBottom:"1px solid "+C.border}}>
+                    {["Año","Ingresos","Egresos","Neto","Acumulado"].map(h=><th key={h} style={{padding:"10px 18px",textAlign:"left",fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:"0.4px",textTransform:"uppercase"}}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {projection.map(r=>{
+                    const isPayback=r.recovered&&!projection[r.year-2]?.recovered;
+                    return (
+                      <tr key={r.year} style={{borderBottom:"1px solid "+C.border,background:isPayback?C.greenLight:"transparent"}}>
+                        <td style={{padding:"10px 18px",color:C.textSec}}>Año {r.year}</td>
+                        <td style={{padding:"10px 18px",color:C.green,fontWeight:500}}>{fUSD(r.inc)}</td>
+                        <td style={{padding:"10px 18px",color:C.red,fontWeight:500}}>−{fUSD(r.exp)}</td>
+                        <td style={{padding:"10px 18px",fontWeight:600}}>{fUSD(r.net)}</td>
+                        <td style={{padding:"10px 18px",fontWeight:700,color:r.cum>=0?C.green:C.red}}>
+                          {r.cum>=0?"+":""}{fUSD(r.cum)}
+                          {isPayback&&<span style={{marginLeft:10,background:C.green,color:"#fff",fontSize:10,padding:"2px 8px",borderRadius:20,fontWeight:700}}>Recupero</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pricing dinámico */}
+          <div style={S.card}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Pricing dinámico · Depto 2</div>
+            <div style={{fontSize:12,color:C.textSec,marginBottom:18}}>Base $70.000/noche · Fee limpieza $15.000</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
+              {pricingExamples.map(({nights,total,perNight})=>(
+                <div key={nights} style={{background:nights===1?C.yellowLight:nights>=7?C.greenLight:C.bg,border:"1px solid "+(nights===1?C.yellow+"44":nights>=7?C.green+"44":C.border),borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
+                  <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>{nights} {nights===1?"noche":"noches"}</div>
+                  <div style={{fontSize:14,fontWeight:800,color:nights===1?C.yellow:nights>=7?C.green:C.text}}>{fARS(total)}</div>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{fARS(perNight)}/n</div>
+                  {(nights===1||nights>=7)&&<div style={{fontSize:9,marginTop:4,fontWeight:700,color:nights===1?C.yellow:C.green}}>{nights===1?"+20%":"-10%"}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ── TAB: ESCENARIOS CAMBIARIOS ─────────────────────────────────────── */}
+      {tab==="escenarios"&&(
+        <div>
+          {/* Parámetros */}
+          <div style={{...S.card,marginBottom:20}}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Parámetros macroeconómicos</div>
+            <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16}}>
+              {[
+                {label:"Inflación ARS anual (%)",         val:infARS,    set:setInfARS,    min:0,  max:300, desc:"Inflación esperada en pesos"},
+                {label:"Inflación USD anual (%)",         val:infUSD,    set:setInfUSD,    min:0,  max:20,  desc:"Inflación americana (erosión del dólar)"},
+                {label:"Ajuste del contrato (% inf.)",    val:ajusteContrato, set:setAjusteContrato, min:0, max:100, desc:"Cuánto acompaña el ajuste a la inflación"},
+              ].map(({label,val,set,min,max,desc})=>(
+                <div key={label} style={{background:C.bg,borderRadius:12,padding:14}}>
+                  <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>{label}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <input type="number" value={val} min={min} max={max} onChange={e=>set(Number(e.target.value))}
+                      style={{...S.input,width:80,textAlign:"center",fontSize:18,fontWeight:700}}/>
+                    <span style={{fontSize:14,color:C.textSec}}>%</span>
+                  </div>
+                  <div style={{fontSize:11,color:C.textMuted}}>{desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cards de escenarios */}
+          <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:20}}>
+            {[
+              {
+                key:"estable", label:"Estabilidad cambiaria", emoji:"⚖",
+                color:C.blue, bg:C.blueLight,
+                desc:"El TC sube con la inflación. Tu ingreso en USD se mantiene estable.",
+                data:escBase, irr:irrEscBase,
+                detalle:`Ajuste contrato: ${ajusteContrato}% de la inflación ARS`,
+              },
+              {
+                key:"devaluacion", label:"Devaluación brusca", emoji:"📉",
+                color:C.red, bg:C.redLight,
+                desc:"El TC salta 50%. Tu ingreso en USD cae transitoriamente, se recupera en 3-4 años.",
+                data:escDevaluacion, irr:irrEscDev,
+                detalle:"Impacto año 1: −35% en USD. Recuperación gradual.",
+              },
+              {
+                key:"atraso", label:"Atraso cambiario", emoji:"📈",
+                color:C.green, bg:C.greenLight,
+                desc:"TC quieto, inflación alta. Tu alquiler en pesos crece y el USD no sube → ganás más en USD.",
+                data:escAtraso, irr:irrEscAtraso,
+                detalle:"Escenario favorable para el propietario en el corto plazo.",
+              },
+            ].map(({key,label,emoji,color,bg,desc,data,irr:irrEsc,detalle})=>{
+              const pb = data.find(r=>r.recovered)?.year;
+              const netY1 = data[0]?.netUSD || 0;
+              return (
+                <div key={key} style={{...S.card,borderTop:"3px solid "+color,cursor:"pointer",outline:escenario===key?"2px solid "+color:"none"}} onClick={()=>setEscenario(key)}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                    <span style={{fontSize:24}}>{emoji}</span>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color}}>{label}</div>
+                      {escenario===key&&<span style={{fontSize:10,background:bg,color,padding:"2px 8px",borderRadius:20,fontWeight:600}}>Activo</span>}
+                    </div>
+                  </div>
+                  <p style={{fontSize:12,color:C.textSec,marginBottom:14,lineHeight:1.5}}>{desc}</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                    <div style={{background:C.bg,borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:3}}>NETO AÑO 1</div>
+                      <div style={{fontSize:14,fontWeight:700,color}}>{fUSD(netY1)}/mes</div>
+                    </div>
+                    <div style={{background:C.bg,borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{fontSize:10,color:C.textMuted,marginBottom:3}}>TIR ESTIMADA</div>
+                      <div style={{fontSize:14,fontWeight:700,color:irrEsc>5?C.green:irrEsc>2?C.yellow:C.red}}>{fPct(irrEsc)}</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:C.textMuted,fontStyle:"italic"}}>{detalle}</div>
+                  <div style={{marginTop:10,background:pb?bg:C.redLight,borderRadius:8,padding:"8px 10px"}}>
+                    <span style={{fontSize:12,fontWeight:600,color}}>
+                      {pb ? "Recupero: año "+pb : "No se recupera en "+years+" años"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Comparación gráfica */}
+          <div style={S.card}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>Comparación de escenarios · Acumulado USD</div>
+            <div style={{fontSize:12,color:C.textSec,marginBottom:20}}>Proyección a {years} años bajo cada escenario</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:6,height:150}}>
+              {Array.from({length:Math.min(years,20)},(_,i)=>{
+                const year=i+1;
+                const base=escBase[i]?.cum||0;
+                const dev=escDevaluacion[i]?.cum||0;
+                const atr=escAtraso[i]?.cum||0;
+                const allVals=[base,dev,atr];
+                const maxV=Math.max(...allVals.map(Math.abs),1);
+                return (
+                  <div key={year} style={{flex:1,height:"100%",display:"flex",alignItems:"flex-end",gap:1}}>
+                    {[
+                      {val:base, color:C.blueMid},
+                      {val:dev,  color:C.red},
+                      {val:atr,  color:C.green},
+                    ].map(({val,color},ci)=>(
+                      <div key={ci} style={{flex:1,height:Math.max(Math.abs(val)/maxV*100,2)+"%",borderRadius:"3px 3px 0 0",background:val>=0?color:color+"66",opacity:0.8}} title={"Año "+year+": "+fUSD(val)}/>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:16,marginTop:12,flexWrap:"wrap"}}>
+              {[{color:C.blueMid,label:"Estable"},{color:C.red,label:"Devaluación"},{color:C.green,label:"Atraso cambiario"}].map(({color,label})=>(
+                <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:12,height:12,borderRadius:3,background:color}}/>
+                  <span style={{fontSize:12,color:C.textSec}}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: REVALORIZACIÓN ────────────────────────────────────────────── */}
+      {tab==="revalorizacion"&&(
+        <div>
+          <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+            {/* Parámetros */}
+            <div style={S.card}>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Supuestos de revalorización</div>
+              <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                {[
+                  {label:"Apreciación anual del inmueble (% en USD)", val:aprecAnual, set:setAprecAnual, min:0, max:20, desc:"Histórico CABA: 2-4% anual en USD en ciclos normales"},
+                  {label:"Horizonte de venta (años)",                  val:anosVenta,  set:setAnosVenta,  min:1, max:40, desc:"En cuántos años proyectás vender o refinanciar"},
+                  {label:"Inflación USD (% anual)",                    val:infUSD,     set:setInfUSD,     min:0, max:10, desc:"Para calcular retorno real en poder de compra global"},
+                ].map(({label,val,set,min,max,desc})=>(
+                  <div key={label}>
+                    <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:8}}>{label}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                      <input type="range" min={min} max={max} step={0.5} value={val} onChange={e=>set(Number(e.target.value))} style={{flex:1,accentColor:C.blue}}/>
+                      <div style={{background:C.bg,borderRadius:8,padding:"4px 10px",minWidth:60,textAlign:"center"}}>
+                        <input type="number" value={val} min={min} max={max} onChange={e=>set(Number(e.target.value))}
+                          style={{...S.input,border:"none",background:"transparent",width:50,textAlign:"center",fontSize:16,fontWeight:700,color:C.blue,padding:0}}/>
+                        <span style={{fontSize:12,color:C.textSec}}>%</span>
+                      </div>
+                    </div>
+                    <div style={{fontSize:11,color:C.textMuted}}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Resultados */}
+            <div style={S.card}>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>Retorno total a {anosVenta} años</div>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {[
+                  {label:"Valor actual del portfolio",  value:fUSD(totalVal),           color:C.text},
+                  {label:"Valor futuro ("+anosVenta+"a.)", value:fUSD(Math.round(valorFuturo)), color:C.blue},
+                  {label:"Plusvalía estimada",           value:fUSD(Math.round(plusvaliaFut)), color:C.green},
+                  {label:"Renta acumulada ("+anosVenta+"a.)", value:fUSD(Math.round(rentaAcum)), color:C.green},
+                  {label:"Retorno total",                value:fUSD(Math.round(retornoTotal)), color:C.green, big:true},
+                ].map(({label,value,color,big})=>(
+                  <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid "+C.border}}>
+                    <span style={{fontSize:13,color:C.textSec}}>{label}</span>
+                    <span style={{fontSize:big?20:14,fontWeight:big?800:600,color}}>{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{marginTop:16,background:C.greenLight,borderRadius:12,padding:16}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.green,marginBottom:8}}>📊 Métricas con revalorización</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {[
+                    {label:"TIR con apreciación",    value:fPct(irrConApreciac), color:irrConApreciac>8?C.green:C.yellow},
+                    {label:"Retorno sobre capital",  value:fPct(retornoPct),     color:retornoPct>50?C.green:C.yellow},
+                    {label:"ROI anualizado",         value:fPct(retornoPct/anosVenta), color:C.blue},
+                    {label:"TIR real (−inf USD)",    value:fPct(Math.max(irrConApreciac-infUSD,0)), color:C.green},
+                  ].map(({label,value,color})=>(
+                    <div key={label} style={{background:"rgba(255,255,255,0.6)",borderRadius:8,padding:"10px 12px"}}>
+                      <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4}}>{label}</div>
+                      <div style={{fontSize:16,fontWeight:800,color}}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico revalorización */}
+          <div style={S.card}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6}}>Evolución del patrimonio a {anosVenta} años</div>
+            <div style={{fontSize:12,color:C.textSec,marginBottom:20}}>Valor del inmueble + renta acumulada (USD)</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:6,height:160}}>
+              {Array.from({length:anosVenta},(_,i)=>{
+                const year=i+1;
+                const valorInm=totalVal*Math.pow(1+aprecAnual/100,year);
+                const rentaAc=annualNet*year;
+                const total=valorInm+rentaAc;
+                const maxTotal=totalVal*Math.pow(1+aprecAnual/100,anosVenta)+annualNet*anosVenta;
+                const pctInm=valorInm/maxTotal*100;
+                const pctRenta=rentaAc/maxTotal*100;
+                return (
+                  <div key={year} style={{flex:1,height:"100%",display:"flex",flexDirection:"column",justifyContent:"flex-end",gap:1}}>
+                    <div title={"Renta acum.: "+fUSD(Math.round(rentaAc))} style={{width:"100%",height:pctRenta+"%",background:C.green,borderRadius:"3px 3px 0 0",opacity:0.8}}/>
+                    <div title={"Valor inmueble: "+fUSD(Math.round(valorInm))} style={{width:"100%",height:pctInm+"%",background:C.blueMid,opacity:0.7}}/>
+                    {(year===1||year%Math.ceil(anosVenta/5)===0)&&<span style={{fontSize:9,color:C.textMuted,textAlign:"center"}}>{year}</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:16,marginTop:12}}>
+              {[{color:C.blueMid,label:"Valor inmueble"},{color:C.green,label:"Renta acumulada"}].map(({color,label})=>(
+                <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:12,height:12,borderRadius:3,background:color}}/>
+                  <span style={{fontSize:12,color:C.textSec}}>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Conclusión */}
+            <div style={{marginTop:16,background:C.blueLight,borderRadius:12,padding:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.blue,marginBottom:6}}>💡 Conclusión del economista</div>
+              <div style={{fontSize:13,color:C.blue,lineHeight:1.6}}>
+                Con una apreciación del <strong>{aprecAnual}% anual</strong> y {anosVenta} años de horizonte,
+                tu TIR total sube de <strong>{fPct(irr)}</strong> a <strong>{fPct(irrConApreciac)}</strong>.
+                La plusvalía aporta <strong>{fUSD(Math.round(plusvaliaFut))}</strong> adicionales a tu retorno.
+                {irrConApreciac > 10
+                  ? " Excelente inversión con horizonte largo."
+                  : irrConApreciac > 6
+                  ? " Buena inversión por encima del mercado inmobiliario americano."
+                  : " Revisá los supuestos de apreciación y renta neta."}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
