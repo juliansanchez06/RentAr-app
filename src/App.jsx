@@ -276,7 +276,7 @@ export default function App() {
 
   if (!user) return <Login onLogin={setUser}/>;
 
-  const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db, setPage };
+  const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db, setPage, user };
 
   return (
     <div className="rentar-layout" style={{ display:"flex", flexDirection:"column", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
@@ -481,7 +481,7 @@ export default function App() {
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
-function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinValue, reload, db }) {
+function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinValue, reload, db, user }) {
   const [nights,setNights]       = useState(pinnedValues?.nights||12);
   const [showCobro,setShowCobro] = useState(false);
   const [cobroMes,setCobroMes]   = useState(new Date().getMonth());
