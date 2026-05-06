@@ -704,9 +704,10 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
                 <input value={g.nombre} onChange={e=>{ setGastos(gastos.map(x=>x.id===g.id?{...x,nombre:e.target.value}:x)); setGastosSaved(false); }} style={{...S.input,flex:1,fontSize:13}}/>
                 <div style={{position:"relative"}}>
                   <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.textMuted,fontSize:13}}>$</span>
-                  <input type="number" value={g.monto} onChange={e=>{ setGastos(gastos.map(x=>x.id===g.id?{...x,monto:Number(e.target.value)}:x)); setGastosSaved(false); }} style={{...S.input,width:110,paddingLeft:22,fontSize:13}}/>
+                  <input type="number" value={g.monto} onChange={e=>{ setGastos(gastos.map(x=>x.id===g.id?{...x,monto:Number(e.target.value)}:x)); setGastosSaved(false); }} style={{...S.input,width:100,paddingLeft:22,fontSize:13}}/>
                 </div>
-                <button onClick={()=>{ setGastos(gastos.filter(x=>x.id!==g.id)); setGastosSaved(false); }} style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:32,height:38,cursor:"pointer",fontSize:16,flexShrink:0}}>×</button>
+                <button onClick={()=>saveGastos()} title="Guardar este gasto" style={{background:C.greenLight,border:"none",color:C.green,borderRadius:8,width:34,height:38,cursor:"pointer",fontSize:14,flexShrink:0,fontWeight:700}}>💾</button>
+                <button onClick={()=>{ setGastos(gastos.filter(x=>x.id!==g.id)); }} style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:32,height:38,cursor:"pointer",fontSize:16,flexShrink:0}}>×</button>
               </div>
             ))}
           </div>
