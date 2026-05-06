@@ -423,6 +423,7 @@ export default function App() {
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
           : page==="transactions" ? <Transactions {...shared}/>
+          : page==="accesos"      ? <Accesos      {...shared}/>
           :                         <Analytics    {...shared}/>}
       </main>
       <style>{`
@@ -562,8 +563,10 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         <div>
           <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>● Portfolio activo</div>
           <h1 style={{fontSize:32,fontWeight:900,letterSpacing:"-1px",margin:0,lineHeight:1.1}}>
-            {now.getHours()<12?"Buenos días":"Buenas tardes"}{" "}
-            <span style={{background:"linear-gradient(135deg,#1e3a6e,#3b82f6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Julian</span> 👋
+            {now.getHours()<12?"Buenos días":now.getHours()<19?"Buenas tardes":"Buenas noches"}{" "}
+            <span style={{background:"linear-gradient(135deg,#1e3a6e,#3b82f6)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"capitalize"}}>
+              {user?.displayName?.split(" ")[0] || user?.email?.split("@")[0] || ""}
+            </span> 👋
           </h1>
           <p style={{color:C.textSec,fontSize:13,marginTop:6}}>
             {now.toLocaleDateString("es-AR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
