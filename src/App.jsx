@@ -1011,7 +1011,6 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
               {gastosSaved?"✓ Guardado":"💾 Guardar"}
             </button>
           </div>
-          </div>
           {saveMsg&&(
             <div style={{
               marginBottom:8,padding:"8px 12px",borderRadius:8,fontSize:12,fontWeight:600,
