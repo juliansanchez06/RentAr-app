@@ -114,13 +114,57 @@ function Login({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight:"100vh", background:C.white, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter', system-ui, sans-serif" }}>
-      <div style={{ width:"100%", maxWidth:420, padding:40 }}>
-        <img src={LOGO} alt="RentAr" style={{ width:180, display:"block", margin:"0 auto 32px" }}/>
-        <h1 style={{ fontSize:26, fontWeight:800, color:C.text, margin:"0 0 6px", letterSpacing:"-0.5px", textAlign:"center" }}>Bienvenido</h1>
-        <p style={{ color:C.textSec, fontSize:14, margin:"0 0 32px", textAlign:"center" }}>Ingresá con tu cuenta de RentAr</p>
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", overflow:"hidden", background:"linear-gradient(135deg, #0f1f4b 0%, #1e3a6e 40%, #1565c0 70%, #0d47a1 100%)" }}>
+      {/* Animated blobs */}
+      <div style={{ position:"absolute", inset:0, overflow:"hidden", pointerEvents:"none" }}>
+        {[
+          { w:500, h:500, top:"-15%", left:"-10%", delay:"0s",  dur:"18s", color:"rgba(100,160,255,0.18)" },
+          { w:400, h:400, top:"50%",  left:"60%",  delay:"4s",  dur:"22s", color:"rgba(30,100,220,0.15)"  },
+          { w:350, h:350, top:"20%",  left:"70%",  delay:"8s",  dur:"16s", color:"rgba(150,200,255,0.12)" },
+          { w:300, h:300, top:"70%",  left:"5%",   delay:"2s",  dur:"20s", color:"rgba(80,140,255,0.14)"  },
+          { w:250, h:250, top:"40%",  left:"30%",  delay:"6s",  dur:"25s", color:"rgba(200,230,255,0.08)" },
+        ].map((b,i)=>(
+          <div key={i} style={{
+            position:"absolute", width:b.w, height:b.h, borderRadius:"50%",
+            background:b.color, top:b.top, left:b.left,
+            animation:`blobMove ${b.dur} ease-in-out ${b.delay} infinite alternate`,
+            filter:"blur(40px)",
+          }}/>
+        ))}
+        {/* Grid lines */}
+        <div style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)", backgroundSize:"60px 60px" }}/>
+      </div>
+
+      {/* Stats floating top */}
+      <div style={{ position:"absolute", top:32, left:0, right:0, display:"flex", justifyContent:"center", gap:32, flexWrap:"wrap", padding:"0 20px" }}>
+        {[
+          { value:"2", label:"Propiedades" },
+          { value:"TIR", label:"Calculada" },
+          { value:"USD", label:"En dólares" },
+          { value:"24/7", label:"Disponible" },
+        ].map(({value,label})=>(
+          <div key={label} style={{ textAlign:"center", color:"rgba(255,255,255,0.7)" }}>
+            <div style={{ fontSize:18, fontWeight:800, color:"#fff", letterSpacing:"-0.5px" }}>{value}</div>
+            <div style={{ fontSize:11, marginTop:2, letterSpacing:"0.5px" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Card */}
+      <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:420, margin:"0 16px", background:"rgba(255,255,255,0.97)", backdropFilter:"blur(20px)", borderRadius:24, padding:"40px 36px", boxShadow:"0 24px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.2)" }}>
+        {/* Logo on white background — no square visible */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
+          <div style={{ background:"#fff", borderRadius:20, padding:"12px 24px", boxShadow:"0 2px 12px rgba(0,0,0,0.08)", display:"inline-block" }}>
+            <img src={LOGO} alt="RentAr" style={{ width:150, display:"block" }}/>
+          </div>
+        </div>
+
+        <h1 style={{ fontSize:24, fontWeight:800, color:C.text, margin:"0 0 6px", letterSpacing:"-0.5px", textAlign:"center" }}>Bienvenido</h1>
+        <p style={{ color:C.textSec, fontSize:14, margin:"0 0 28px", textAlign:"center" }}>Ingresá con tu cuenta de RentAr</p>
+
         {error && <div style={{ background:C.redLight, border:"1px solid #fca5a5", borderRadius:10, padding:"10px 14px", fontSize:13, color:C.red, marginBottom:20 }}>{error}</div>}
-        <form onSubmit={handleLogin} style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+        <form onSubmit={handleLogin} style={{ display:"flex", flexDirection:"column", gap:14 }}>
           <div>
             <label style={S.label}>Email</label>
             <input type="email" value={email} onChange={e=>setEmail(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="tu@email.com" autoFocus/>
@@ -129,12 +173,21 @@ function Login({ onLogin }) {
             <label style={S.label}>Contraseña</label>
             <input type="password" value={password} onChange={e=>setPassword(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="••••••••"/>
           </div>
-          <button type="submit" disabled={loading} style={{ ...S.btn, width:"100%", justifyContent:"center", marginTop:8, background:"linear-gradient(135deg,#1e3a6e,#1d4ed8)", padding:"14px 0", fontSize:15, borderRadius:12, opacity:loading?0.7:1 }}>
+          <button type="submit" disabled={loading} style={{ ...S.btn, width:"100%", justifyContent:"center", marginTop:6, background:"linear-gradient(135deg,#1e3a6e,#1d4ed8)", padding:"14px 0", fontSize:15, borderRadius:12, opacity:loading?0.7:1 }}>
             {loading?"Ingresando...":"Ingresar →"}
           </button>
         </form>
-        <p style={{ fontSize:12, color:C.textMuted, marginTop:24, textAlign:"center" }}>Plataforma privada · Solo acceso autorizado</p>
+        <p style={{ fontSize:12, color:C.textMuted, marginTop:20, textAlign:"center" }}>Plataforma privada · Solo acceso autorizado</p>
       </div>
+
+      <style>{`
+        @keyframes blobMove {
+          0%   { transform: translate(0,0) scale(1); }
+          33%  { transform: translate(40px,-30px) scale(1.1); }
+          66%  { transform: translate(-20px,40px) scale(0.95); }
+          100% { transform: translate(30px,20px) scale(1.05); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -176,9 +229,13 @@ export default function App() {
   useEffect(()=>{ if(user) loadAll().finally(()=>setLoading(false)); },[user]);
 
   async function pinValue(key,value) {
-    const updated={...pinnedValues,[key]:value};
+    // Serialize arrays to JSON strings for Firestore compatibility
+    const serialized = Array.isArray(value) ? JSON.stringify(value) : value;
+    const updated={...pinnedValues,[key]:serialized};
     setPinnedValues(updated);
-    await setDoc(doc(db,"re_config","pinned"),updated);
+    try {
+      await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+    } catch(e) { console.error("pinValue error:", e); }
   }
 
   async function handleLogout() { await signOut(auth); setUser(null); setPage("dashboard"); }
@@ -195,7 +252,7 @@ export default function App() {
 
   return (
     <div style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
-      <aside style={{ width:230, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50 }}>
+      <aside className="sidebar" style={{ width:230, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50 }}>
         <div style={{ padding:"18px 20px 14px", borderBottom:"1px solid "+C.border, textAlign:"center" }}>
           <img src={LOGO} alt="RentAr" style={{ width:130, display:"block", margin:"0 auto" }}/>
         </div>
@@ -233,7 +290,7 @@ export default function App() {
           </div>
         </div>
       </aside>
-      <main style={{ flex:1, marginLeft:230, padding:"36px 40px", minHeight:"100vh" }}>
+      <main className="main-content" style={{ flex:1, marginLeft:230, padding:"36px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
             <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid "+C.border, borderTopColor:C.blue, animation:"spin 0.8s linear infinite" }}/>
@@ -258,6 +315,12 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
         button:hover{opacity:0.85}
         select option{background:white}
+        @media(max-width:768px){
+          .sidebar{width:100%!important;height:auto!important;position:relative!important;flex-direction:row!important}
+          .sidebar nav{flex-direction:row!important;padding:6px!important;overflow-x:auto!important}
+          .sidebar nav button{padding:8px 10px!important;font-size:12px!important;white-space:nowrap!important}
+          .main-content{margin-left:0!important;padding:16px!important}
+        }
       `}</style>
     </div>
   );
@@ -468,8 +531,13 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
     { id:4, nombre:"Otros",               monto:5000  },
   ];
 
-  // Cargar gastos desde pinnedValues si existen
-  const [gastos,setGastos]=useState(pinnedValues?.gastos || defaultGastos);
+  function parseGastos(raw) {
+    if (!raw) return defaultGastos;
+    if (Array.isArray(raw)) return raw;
+    try { return JSON.parse(raw); } catch { return defaultGastos; }
+  }
+
+  const [gastos,setGastos]=useState(() => parseGastos(pinnedValues?.gastos));
   const [nuevoNombre,setNuevoNombre]=useState("");
   const [nuevoMonto,setNuevoMonto]=useState("");
   const [targetGanancia,setTargetGanancia]=useState(pinnedValues?.targetGanancia||200);
