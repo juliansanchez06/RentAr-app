@@ -277,7 +277,86 @@ export default function App() {
   const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db, setPage };
 
   return (
-    <div className="rentar-layout" style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
+    <div className="rentar-layout" style={{ display:"flex", flexDirection:"column", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
+      {/* ── TOP NAVIGATION BAR ───────────────────────────────────────── */}
+      <header style={{
+        position:"fixed", top:0, left:0, right:0, zIndex:100,
+        background:"#fff",
+        borderBottom:"1px solid "+C.border,
+        boxShadow:"0 2px 16px rgba(0,0,0,0.07)",
+        display:"flex", alignItems:"center",
+        height:64, padding:"0 24px", gap:0,
+      }}>
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0, marginRight:24 }}>
+          <img src={LOGO} alt="RentAr" style={{ height:44, width:"auto", background:"#fff", borderRadius:10 }}/>
+        </div>
+
+        {/* Divider */}
+        <div style={{ width:1, height:32, background:C.border, marginRight:16, flexShrink:0 }}/>
+
+        {/* Nav tabs */}
+        <nav style={{ display:"flex", alignItems:"center", gap:2, flex:1, overflowX:"auto" }}>
+          {NAV.map(n=>(
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              display:"flex", alignItems:"center", gap:7,
+              padding:"8px 14px", borderRadius:10, border:"none", cursor:"pointer",
+              background:page===n.id?"linear-gradient(135deg,#eff6ff,#ede9fe)":"transparent",
+              color:page===n.id?C.blue:C.textSec,
+              fontSize:13, fontWeight:page===n.id?700:500,
+              whiteSpace:"nowrap", flexShrink:0,
+              transition:"all 0.15s ease",
+              boxShadow:page===n.id?"0 2px 8px rgba(37,99,235,0.12)":"none",
+              borderBottom:page===n.id?"2px solid "+C.blue:"2px solid transparent",
+            }}>
+              <span style={{ color:page===n.id?C.blue:C.textMuted, display:"flex", flexShrink:0 }}>
+                {NAV_ICONS[n.id]}
+              </span>
+              <span className="nav-label-top">{n.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Right side: Firebase + TC + user */}
+        <div className="header-right" style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0, marginLeft:16 }}>
+          {/* Firebase status */}
+          <div title={"Firebase "+fbStatus} style={{
+            width:8, height:8, borderRadius:"50%",
+            background:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow,
+            flexShrink:0,
+          }}/>
+
+          {/* TC widget */}
+          <div style={{
+            display:"flex", alignItems:"center", gap:6,
+            background:C.bg, borderRadius:10, padding:"6px 12px",
+            border:"1px solid "+C.border,
+          }}>
+            <span style={{ fontSize:11, color:C.textMuted, fontWeight:600, whiteSpace:"nowrap" }}>MEP $</span>
+            <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
+              style={{ width:64, fontSize:15, fontWeight:800, color:C.green, border:"none", background:"transparent", outline:"none", fontFamily:"inherit" }}/>
+            <PinBtn pinKey="tc" value={tc} pinnedValues={pinnedValues} pinValue={pinValue}/>
+          </div>
+
+          {/* User + logout */}
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{
+              width:32, height:32, borderRadius:"50%",
+              background:"linear-gradient(135deg,#2563eb,#7c3aed)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              color:"#fff", fontSize:13, fontWeight:800,
+            }}>
+              {user?.email?.[0]?.toUpperCase()}
+            </div>
+            <button onClick={handleLogout} style={{
+              background:C.redLight, border:"none", color:C.red,
+              borderRadius:8, padding:"6px 12px", fontSize:12,
+              fontWeight:600, cursor:"pointer",
+            }}>Salir</button>
+          </div>
+        </div>
+      </header>
+
       {/* ── MOBILE BOTTOM NAV ─────────────────────────────────────────── */}
       <nav className="mobile-nav" style={{ display:"none" }}>
         {NAV.map(n=>(
@@ -299,99 +378,12 @@ export default function App() {
             }}>
               {NAV_ICONS[n.id]}
             </span>
-            <span style={{ fontSize:8, fontWeight:page===n.id?700:500, whiteSpace:"nowrap", letterSpacing:"0.2px" }}>{n.short}</span>
+            <span style={{ fontSize:8, fontWeight:page===n.id?700:500, whiteSpace:"nowrap" }}>{n.short}</span>
           </button>
         ))}
       </nav>
 
-      {/* ── DESKTOP SIDEBAR ───────────────────────────────────────────── */}
-      <aside className="sidebar" style={{
-        width:72, background:C.white, borderRight:"1px solid "+C.border,
-        display:"flex", flexDirection:"column", position:"fixed",
-        top:0, left:0, bottom:0, zIndex:50,
-        boxShadow:"2px 0 20px rgba(0,0,0,0.05)",
-      }}>
-        {/* Logo compacto */}
-        <div style={{ padding:"14px 10px 12px", borderBottom:"1px solid "+C.border, textAlign:"center", background:C.white }}>
-          <img src={LOGO} alt="RentAr" style={{ width:44, height:44, objectFit:"contain", borderRadius:10 }}/>
-        </div>
-
-        {/* Firebase dot */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"6px 0", borderBottom:"1px solid "+C.border }}>
-          <div title={"Firebase "+fbStatus} style={{ width:7, height:7, borderRadius:"50%", background:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow }}/>
-        </div>
-
-        {/* Nav icons */}
-        <nav style={{ flex:1, padding:"8px 6px", display:"flex", flexDirection:"column", gap:4, overflowY:"auto" }}>
-          {NAV.map(n=>(
-            <div key={n.id} style={{ position:"relative" }} className="nav-item-wrap">
-              <button onClick={()=>setPage(n.id)} title={n.label} style={{
-                display:"flex", alignItems:"center", justifyContent:"center",
-                width:"100%", aspectRatio:"1",
-                borderRadius:12, border:"none", cursor:"pointer",
-                background:page===n.id?"linear-gradient(135deg,#2563eb,#7c3aed)":"transparent",
-                color:page===n.id?"#fff":C.textSec,
-                transition:"all 0.18s ease",
-                boxShadow:page===n.id?"0 4px 12px rgba(37,99,235,0.35)":"none",
-                transform:page===n.id?"scale(1.05)":"scale(1)",
-              }}>
-                {NAV_ICONS[n.id]}
-              </button>
-              {/* Tooltip */}
-              <div className="nav-tooltip" style={{
-                position:"absolute", left:"calc(100% + 10px)", top:"50%", transform:"translateY(-50%)",
-                background:C.text, color:"#fff", fontSize:12, fontWeight:600,
-                padding:"5px 10px", borderRadius:8, whiteSpace:"nowrap",
-                pointerEvents:"none", opacity:0, transition:"opacity 0.15s",
-                zIndex:200,
-              }}>{n.label}</div>
-            </div>
-          ))}
-        </nav>
-
-        {/* TC compacto */}
-        <div style={{ padding:"8px 6px", borderTop:"1px solid "+C.border }}>
-          <div style={{ background:C.bg, borderRadius:10, padding:"8px 6px", border:"1px solid "+C.border, textAlign:"center" }}>
-            <div style={{ fontSize:9, color:C.textMuted, fontWeight:700, textTransform:"uppercase", marginBottom:2 }}>MEP</div>
-            <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
-              style={{ width:"100%", fontSize:13, fontWeight:800, color:C.green, border:"none", background:"transparent", outline:"none", textAlign:"center", fontFamily:"inherit" }}/>
-          </div>
-          <button onClick={handleLogout} title="Cerrar sesión" style={{
-            width:"100%", marginTop:6, background:C.redLight, border:"none",
-            color:C.red, borderRadius:8, padding:"6px 0", fontSize:11,
-            fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
-        </div>
-      </aside>
-      {/* Mobile top bar */}
-      <div className="mobile-header" style={{ display:"none" }}>
-        <div style={{
-          display:"flex", alignItems:"center", justifyContent:"space-between",
-          padding:"8px 14px", background:C.white,
-          borderBottom:"1px solid "+C.border,
-          position:"fixed", top:0, left:0, right:0, zIndex:99,
-          boxShadow:"0 2px 10px rgba(0,0,0,0.06)",
-        }}>
-          <img src={LOGO} alt="RentAr" style={{ height:34, background:"#fff", borderRadius:8, padding:"2px 6px" }}/>
-          <div style={{ flex:1, textAlign:"center" }}>
-            <span style={{ fontSize:13, fontWeight:800, color:C.text }}>Rent<span style={{color:C.green}}>Ar</span></span>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:3, background:C.bg, borderRadius:8, padding:"5px 9px", border:"1px solid "+C.border }}>
-              <span style={{ fontSize:10, color:C.textMuted, fontWeight:700 }}>$</span>
-              <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
-                style={{ width:52, fontSize:14, fontWeight:800, color:C.green, border:"none", background:"transparent", outline:"none", fontFamily:"inherit" }}/>
-            </div>
-            <button onClick={handleLogout} style={{ background:C.redLight, border:"none", fontSize:11, color:C.red, cursor:"pointer", padding:"5px 10px", borderRadius:8, fontWeight:600 }}>Salir</button>
-          </div>
-        </div>
-      </div>
-
-      <main className="main-content" style={{ flex:1, marginLeft:72, padding:"36px 40px", minHeight:"100vh" }}>
+            <main className="main-content" style={{ flex:1, marginLeft:0, padding:"84px 40px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
             <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid "+C.border, borderTopColor:C.blue, animation:"spin 0.8s linear infinite" }}/>
@@ -424,33 +416,37 @@ export default function App() {
         .nav-item-wrap:hover .nav-tooltip{opacity:1!important}
         .nav-item-wrap button:hover{background:${C.bg}!important;color:${C.blue}!important}
         @media(max-width:900px){
-          .rentar-layout{flex-direction:column!important}
-          .sidebar{display:none!important}
+          header nav{display:none!important}
+          header .nav-right-hide{display:none!important}
+          header{padding:0 14px!important;justify-content:space-between!important}
           .mobile-nav{
             display:flex!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;
             background:white!important;border-top:1px solid #e8eaed!important;
             z-index:100!important;padding:4px 0 env(safe-area-inset-bottom,8px)!important;
             box-shadow:0 -4px 20px rgba(0,0,0,0.1)!important;
           }
-          .mobile-header{display:block!important}
-          .main-content{margin-left:0!important;padding:80px 12px 90px!important;min-height:100vh!important;background:#f7f8fa!important}
+          .main-content{padding:76px 12px 90px!important;min-height:100vh!important}
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-2{grid-template-columns:1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
           .grid-6{grid-template-columns:repeat(3,1fr)!important}
           .eq-grid{grid-template-columns:1fr!important}
           table{font-size:11px!important}
-          table td,table th{padding:8px 10px!important}
+          table td,table th{padding:8px 8px!important}
           h1{font-size:20px!important}
-          .hide-mobile{display:none!important}
-          .modal-box{padding:16px!important;border-radius:16px!important}
-          .rentar-layout{background:#f7f8fa!important;min-height:100vh!important}
+          .header-right .tc-hide{display:none!important}
+          .modal-box{padding:16px!important;border-radius:16px!important;margin:10px!important;max-width:calc(100vw - 20px)!important}
         }
         @media(max-width:480px){
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
           .grid-6{grid-template-columns:repeat(2,1fr)!important}
-          .main-content{padding:72px 10px 88px!important}
+          .main-content{padding:68px 10px 88px!important}
+        }
+        .nav-label-top{display:inline}
+        @media(max-width:1100px){
+          .nav-label-top{display:none!important}
+          header nav button{padding:8px!important}
         }
       `}</style>
     </div>
