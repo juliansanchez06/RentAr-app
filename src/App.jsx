@@ -214,12 +214,24 @@ export default function App() {
   async function loadAll() {
     try {
       const [ps,ts,bs,pinDoc] = await Promise.all([
-        getDocs(query(collection(db,"re_properties"),orderBy("createdAt","desc"))),
-        getDocs(query(collection(db,"re_transactions"),orderBy("date","desc"))),
-        getDocs(query(collection(db,"re_bookings"),orderBy("checkIn","desc"))),
+        getDocs(collection(db,"re_properties")),
+        getDocs(collection(db,"re_transactions")),
+        getDocs(collection(db,"re_bookings")),
         getDoc(doc(db,"re_config","pinned")),
       ]);
-      setProperties(ps.docs.map(d=>({id:d.id,...d.data()})));
+      setProperties(ps.docs.map(d=>{
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          estimatedValueUSD:  Number(data.estimatedValueUSD  || 0),
+          purchasePriceUSD:   Number(data.purchasePriceUSD   || 0),
+          monthlyIncomeARS:   Number(data.monthlyIncomeARS   || 0),
+          monthlyExpensesARS: Number(data.monthlyExpensesARS || 0),
+          bedrooms:           Number(data.bedrooms           || 0),
+          sqm:                Number(data.sqm                || 0),
+        };
+      }));
       setTransactions(ts.docs.map(d=>({id:d.id,...d.data()})));
       setBookings(bs.docs.map(d=>({id:d.id,...d.data()})));
       if (pinDoc.exists()) { const data=pinDoc.data(); setPinnedValues(data); if(data.tc) setTc(data.tc); }
@@ -387,8 +399,8 @@ export default function App() {
 function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinValue }) {
   const [nights,setNights]=useState(pinnedValues?.nights||12);
   const now=new Date();
-  const d1=properties.find(p=>p.type==="fixed_rental");
-  const d2=properties.find(p=>p.type==="short_term");
+  const d1=properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
+  const d2=properties.find(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
 
   const inc1ARS = d1 ? (transactions.filter(t=>t.propertyId===d1.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3||476670) : 476670;
   const inc1USD=arsToUsd(inc1ARS,tc), net1USD=inc1USD, val1=d1?.estimatedValueUSD||67000;
@@ -803,7 +815,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
     if(!form.name){setError("El nombre es obligatorio.");return;}
     setSaving(true);setError("");
     try {
-      await addDoc(collection(db,"re_properties"),{...form,photos:[],createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+      await addDoc(collection(db,"re_properties"),{...form,photos:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()});
       await reload();
       setShowForm(false);
       setForm({name:"",type:"fixed_rental",address:"",bedrooms:1,sqm:0,estimatedValueUSD:0,purchasePriceUSD:0,monthlyIncomeARS:0,monthlyExpensesARS:0,status:"rented",description:""});
@@ -814,7 +826,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 
   async function saveEdit(id) {
     try {
-      await updateDoc(doc(db,"re_properties",id),{...editValues,updatedAt:serverTimestamp()});
+      await updateDoc(doc(db,"re_properties",id),{...editValues,updatedAt:new Date().toISOString()});
       await reload();
       setEditingId(null);
     } catch(e){alert("Error al guardar: "+e.message);}
@@ -1030,7 +1042,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
   const [month,setMonth]=useState(new Date().getMonth());
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
-  const shortProps=properties.filter(p=>p.type==="short_term");
+  const shortProps=properties.filter(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
   const [propId,setPropId]=useState(shortProps[0]?.id||"");
   const [commPct,setCommPct]=useState(0);
   const [form,setForm]=useState({guestName:"",guestEmail:"",guestPhone:"",checkIn:"",checkOut:"",source:"direct",status:"confirmed",notes:""});
@@ -1081,7 +1093,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
         comisionARS:pricing?.comision||0,
         totalUSD:pricing?arsToUsd(pricing.neto,tc):0,
         exchangeRateUsed:tc,
-        createdAt:serverTimestamp(),updatedAt:serverTimestamp(),
+        createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),
       });
       await reload();
       setShowForm(false);
@@ -1100,7 +1112,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
         await addDoc(collection(db, "re_movimientos"), {
           ...bk,
           tipo: "reserva_eliminada",
-          eliminadaEn: serverTimestamp(),
+          eliminadaEn: new Date().toISOString(),
         });
       }
       await deleteDoc(doc(db, "re_bookings", id));
@@ -1277,7 +1289,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
     setSaving(true);setError("");
     try {
       const ars=Number(amountARS);
-      await addDoc(collection(db,"re_transactions"),{...form,type,amountARS:ars,amountUSD:arsToUsd(ars,tc),exchangeRateUsed:tc,createdAt:serverTimestamp()});
+      await addDoc(collection(db,"re_transactions"),{...form,type,amountARS:ars,amountUSD:arsToUsd(ars,tc),exchangeRateUsed:tc,createdAt:new Date().toISOString()});
       await reload();
       setShowForm(false);setAmountARS("");
       setForm({propertyId:"",category:"rent",date:todayStr(),description:""});
@@ -1393,7 +1405,7 @@ function Movimientos({ db }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDocs(query(collection(db, "re_movimientos"), orderBy("eliminadaEn", "desc")))
+    getDocs(collection(db, "re_movimientos"))
       .then(snap => {
         setMovimientos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       })
