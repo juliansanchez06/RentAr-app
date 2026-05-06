@@ -925,6 +925,9 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
   const [saveMsg,setSaveMsg]           = useState("");
   const [moneda,setMoneda]             = useState("ARS"); // ARS o USD por gasto
   const [minNights,setMinNights]       = useState(pinnedValues?.minNights||2);
+  const [tarifaBase,setTarifaBase]     = useState(pinnedValues?.tarifaBase||70000);
+  const [desc2Pers,setDesc2Pers]       = useState(pinnedValues?.desc2Pers||10);
+  const [desc1Pers,setDesc1Pers]       = useState(pinnedValues?.desc1Pers||20);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
 
@@ -960,6 +963,9 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         commAirbnb: Number(commAirbnb),
         commBooking: Number(commBooking),
         minNights: Number(minNights),
+        tarifaBase: Number(tarifaBase),
+        desc2Pers: Number(desc2Pers),
+        desc1Pers: Number(desc1Pers),
       }, { merge: true });
 
       setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
@@ -1726,7 +1732,10 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
     try {
       await addDoc(collection(db,"re_bookings"),{
         ...form,propertyId:propId,nights,
-        basePricePerNight:70000,cleaningFee:15000,commissionPct:commPct,
+        personas:form.personas||3,
+        basePricePerNight:tarifaPersonas,
+        tarifaPersonasDesc: form.personas===1?desc1PersV:form.personas===2?desc2PersV:0,
+        cleaningFee:15000,commissionPct:commPct,
         totalARS:pricing?.total||0,
         totalNetoARS:pricing?.neto||0,
         comisionARS:pricing?.comision||0,
@@ -1878,11 +1887,38 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                   ))}
                 </div>
               </div>
+              {/* Cantidad de personas */}
+              <div>
+                <label style={S.label}>Cantidad de personas</label>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                  {[1,2,3].map(n=>(
+                    <button key={n} type="button" onClick={()=>setF("personas",n)} style={{
+                      padding:"10px 0",borderRadius:10,border:"1.5px solid "+(form.personas===n?C.blue:C.border),
+                      background:form.personas===n?C.blueLight:"transparent",
+                      color:form.personas===n?C.blue:C.textSec,
+                      fontWeight:form.personas===n?700:400,fontSize:14,cursor:"pointer",
+                      display:"flex",flexDirection:"column",alignItems:"center",gap:2,
+                    }}>
+                      <span style={{fontSize:18}}>{"👤".repeat(n)}</span>
+                      <span>{n} {n===1?"persona":"personas"}</span>
+                      {n<3&&<span style={{fontSize:10,color:n===form.personas?C.blue:C.textMuted}}>
+                        −{n===1?desc1PersV:desc2PersV}% desc.
+                      </span>}
+                      {n===3&&<span style={{fontSize:10,color:n===form.personas?C.blue:C.green}}>Tarifa completa</span>}
+                    </button>
+                  ))}
+                </div>
+                {form.personas<3&&(
+                  <div style={{fontSize:12,color:C.blue,marginTop:6,background:C.blueLight,padding:"6px 10px",borderRadius:8}}>
+                    💡 Tarifa ajustada: {fARS(tarifaPersonas)}/noche (−{form.personas===1?desc1PersV:desc2PersV}% por {form.personas===1?"1 persona":"2 personas"})
+                  </div>
+                )}
+              </div>
               <div><label style={S.label}>Estado</label><select style={S.input} value={form.status} onChange={e=>setF("status",e.target.value)}><option value="confirmed">Confirmada</option><option value="blocked">Bloqueado</option></select></div>
-              {nights>0&&nights<minNightsVal&&(
+              {belowMin&&(
                 <div style={{background:C.redLight,borderRadius:12,padding:"12px 16px",border:"1px solid "+C.red}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.red}}>⚠ Mínimo {minNightsVal} noches requeridas</div>
-                  <div style={{fontSize:12,color:C.red,marginTop:4}}>Esta reserva está por debajo del mínimo configurado en Punto de Equilibrio.</div>
+                  <div style={{fontSize:12,color:C.red,marginTop:4}}>Esta reserva está por debajo del mínimo configurado en Punto de Equilibrio. Cambiá las fechas o ajustá el mínimo.</div>
                 </div>
               )}
               {pricing&&(
