@@ -616,20 +616,13 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
 
   async function saveGastos() {
     try {
-      // Clean gastos - simple array with only nombre and monto
       const cleanGastos = gastos.map((g, i) => ({
         id: i + 1,
         nombre: String(g.nombre || ""),
         monto: Number(g.monto || 0),
       }));
-      const gastosStr = JSON.stringify(cleanGastos);
-      const updated = {
-        ...pinnedValues,
-        gastos: gastosStr,
-        targetGanancia: Number(targetGanancia),
-      };
-      setPinnedValues(updated);
-      await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+      await pinValue("gastos", JSON.stringify(cleanGastos));
+      await pinValue("targetGanancia", Number(targetGanancia));
       setGastosSaved(true);
       setTimeout(()=>setGastosSaved(false), 2500);
     } catch(e) {
