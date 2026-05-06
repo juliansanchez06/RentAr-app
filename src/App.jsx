@@ -416,7 +416,7 @@ export default function App() {
             <div style={{ color:C.textSec, fontSize:14 }}>Cargando datos...</div>
           </div>
         ) : page==="dashboard"    ? <Dashboard    {...shared}/>
-          : page==="equilibrio"   ? <Equilibrio   {...shared}/>
+          : page==="equilibrio"   ? <Equilibrio   tc={tc} pinnedValues={pinnedValues} pinValue={pinValue} db={db}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
@@ -864,7 +864,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
-function Equilibrio({ tc, pinnedValues, pinValue }) {
+function Equilibrio({ tc, pinnedValues, pinValue, db }) {
   const defaultGastos = [
     { id:1, nombre:"Internet",             monto:15000 },
     { id:2, nombre:"Expensas",             monto:45000 },
@@ -891,6 +891,7 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   const [commBooking,setCommBooking]   = useState(pinnedValues?.commBooking||15);
   const [platform,setPlatform]         = useState("direct");
   const [gastosSaved,setGastosSaved]   = useState(false);
+  const [saveMsg,setSaveMsg]           = useState("");
   const [moneda,setMoneda]             = useState("ARS"); // ARS o USD por gasto
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
@@ -908,18 +909,33 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   const ingresoNecesarioARS = (totalGastosUSD+targetGanancia)*tc;
 
   async function saveGastos() {
+    setSaveMsg("⏳ Guardando...");
     try {
+      // Build clean array
       const cleanGastos = gastos.map((g,i)=>({
-        id:i+1,
-        nombre:String(g.nombre||""),
-        monto:Number(g.monto||0),
-        moneda:g.moneda||"ARS",
+        id: i+1,
+        nombre: String(g.nombre||""),
+        monto: Number(g.monto||0),
+        moneda: g.moneda||"ARS",
       }));
-      await pinValue("gastos", JSON.stringify(cleanGastos));
-      await pinValue("targetGanancia", Number(targetGanancia));
+      const gastosStr = JSON.stringify(cleanGastos);
+
+      // Write directly to Firestore
+      const docRef = doc(db, "re_config", "pinned");
+      await setDoc(docRef, {
+        gastos: gastosStr,
+        targetGanancia: Number(targetGanancia),
+        commAirbnb: Number(commAirbnb),
+        commBooking: Number(commBooking),
+      }, { merge: true });
+
+      setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
       setGastosSaved(true);
-      setTimeout(()=>setGastosSaved(false), 2500);
-    } catch(e) { alert("Error al guardar gastos: "+e.message); }
+      setTimeout(()=>{ setGastosSaved(false); setSaveMsg(""); }, 3000);
+    } catch(e) {
+      setSaveMsg("❌ "+e.code+": "+e.message);
+      console.error("saveGastos error:", e);
+    }
   }
 
   function agregarGasto() {
@@ -995,6 +1011,14 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
               {gastosSaved?"✓ Guardado":"💾 Guardar"}
             </button>
           </div>
+          </div>
+          {saveMsg&&(
+            <div style={{
+              marginBottom:8,padding:"8px 12px",borderRadius:8,fontSize:12,fontWeight:600,
+              background:saveMsg.includes("✅")?C.greenLight:saveMsg.includes("❌")?C.redLight:"#fef9c3",
+              color:saveMsg.includes("✅")?C.green:saveMsg.includes("❌")?C.red:"#854d0e",
+            }}>{saveMsg}</div>
+          )}
           <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>Ingresá en ARS o USD — se convierte automáticamente</div>
 
           {/* Header columnas */}
