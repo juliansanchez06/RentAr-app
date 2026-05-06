@@ -114,7 +114,7 @@ function Login({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", overflow:"hidden", background:"linear-gradient(135deg, #0f1f4b 0%, #1e3a6e 40%, #1565c0 70%, #0d47a1 100%)" }}>
+    <div style={{ position:"fixed", inset:0, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter', system-ui, sans-serif", overflow:"hidden", background:"linear-gradient(135deg, #0f1f4b 0%, #1e3a6e 40%, #1565c0 70%, #0d47a1 100%)" }}>
       {/* Animated blobs */}
       <div style={{ position:"absolute", inset:0, overflow:"hidden", pointerEvents:"none" }}>
         {[
@@ -229,13 +229,27 @@ export default function App() {
   useEffect(()=>{ if(user) loadAll().finally(()=>setLoading(false)); },[user]);
 
   async function pinValue(key,value) {
-    // Serialize arrays to JSON strings for Firestore compatibility
-    const serialized = Array.isArray(value) ? JSON.stringify(value) : value;
-    const updated={...pinnedValues,[key]:serialized};
-    setPinnedValues(updated);
     try {
+      // Firestore can't store nested arrays of objects - store each item flat
+      let toStore = value;
+      if (Array.isArray(value)) {
+        // Store as separate keys: gastos_0, gastos_1, etc + gastos_count
+        const batch = {};
+        batch[key + "_count"] = value.length;
+        value.forEach((item, i) => {
+          batch[key + "_" + i + "_id"]     = item.id || i;
+          batch[key + "_" + i + "_nombre"] = item.nombre || "";
+          batch[key + "_" + i + "_monto"]  = item.monto || 0;
+        });
+        const updated = { ...pinnedValues, ...batch };
+        setPinnedValues(updated);
+        await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+        return;
+      }
+      const updated = { ...pinnedValues, [key]: toStore };
+      setPinnedValues(updated);
       await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
-    } catch(e) { console.error("pinValue error:", e); }
+    } catch(e) { console.error("pinValue error:", e); alert("Error al guardar: " + e.message); }
   }
 
   async function handleLogout() { await signOut(auth); setUser(null); setPage("dashboard"); }
@@ -251,12 +265,12 @@ export default function App() {
   const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db };
 
   return (
-    <div style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
+    <div className="rentar-layout" style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
       <aside className="sidebar" style={{ width:230, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50 }}>
-        <div style={{ padding:"18px 20px 14px", borderBottom:"1px solid "+C.border, textAlign:"center" }}>
+        <div className="sidebar-logo" style={{ padding:"18px 20px 14px", borderBottom:"1px solid "+C.border, textAlign:"center" }}>
           <img src={LOGO} alt="RentAr" style={{ width:130, display:"block", margin:"0 auto" }}/>
         </div>
-        <div style={{ padding:"6px 14px 6px", borderBottom:"1px solid "+C.border }}>
+        <div className="sidebar-fb" style={{ padding:"6px 14px 6px", borderBottom:"1px solid "+C.border }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow }}>
             <div style={{ width:6, height:6, borderRadius:"50%", background:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow }}/>
             Firebase {fbStatus==="connected"?"conectado":fbStatus==="error"?"error":"conectando..."}
@@ -271,8 +285,8 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <div style={{ padding:"12px 14px", borderTop:"1px solid "+C.border }}>
-          <div style={{ background:C.bg, borderRadius:12, padding:"10px 12px", border:"1px solid "+C.border, marginBottom:10 }}>
+        <div className="sidebar-bottom" style={{ padding:"12px 14px", borderTop:"1px solid "+C.border, display:"flex", flexDirection:"column", gap:10 }}>
+          <div className="tc-widget" style={{ background:C.bg, borderRadius:12, padding:"10px 12px", border:"1px solid "+C.border, marginBottom:10 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
               <span style={{ fontSize:10, color:C.textMuted, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.5px" }}>Dólar MEP</span>
               <PinBtn pinKey="tc" value={tc} pinnedValues={pinnedValues} pinValue={pinValue}/>
@@ -316,10 +330,39 @@ export default function App() {
         button:hover{opacity:0.85}
         select option{background:white}
         @media(max-width:768px){
-          .sidebar{width:100%!important;height:auto!important;position:relative!important;flex-direction:row!important}
-          .sidebar nav{flex-direction:row!important;padding:6px!important;overflow-x:auto!important}
-          .sidebar nav button{padding:8px 10px!important;font-size:12px!important;white-space:nowrap!important}
-          .main-content{margin-left:0!important;padding:16px!important}
+          .rentar-layout{flex-direction:column!important}
+          .sidebar{
+            width:100%!important;height:auto!important;position:relative!important;
+            flex-direction:column!important;border-right:none!important;
+            border-bottom:1px solid #e8eaed!important;
+          }
+          .sidebar-logo{padding:12px 16px 8px!important}
+          .sidebar-logo img{width:90px!important}
+          .sidebar-fb{display:none!important}
+          .sidebar nav{
+            flex-direction:row!important;padding:4px 8px!important;
+            gap:2px!important;overflow-x:auto!important;flex-wrap:nowrap!important;
+          }
+          .sidebar nav button{
+            padding:7px 10px!important;font-size:12px!important;
+            white-space:nowrap!important;flex-shrink:0!important;min-width:auto!important;
+          }
+          .sidebar-bottom{
+            flex-direction:row!important;padding:8px 12px!important;
+            align-items:center!important;gap:12px!important;
+          }
+          .tc-widget{padding:6px 10px!important;margin-bottom:0!important;flex:1!important}
+          .tc-widget input{font-size:15px!important}
+          .main-content{margin-left:0!important;padding:16px 12px!important}
+          .grid-4{grid-template-columns:1fr 1fr!important}
+          .grid-2{grid-template-columns:1fr!important}
+          .grid-3{grid-template-columns:1fr 1fr!important}
+          .card-p{padding:16px!important}
+          h1{font-size:20px!important}
+        }
+        @media(max-width:400px){
+          .grid-4{grid-template-columns:1fr 1fr!important}
+          .sidebar nav button span.nav-label{display:none!important}
         }
       `}</style>
     </div>
@@ -373,7 +416,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         </p>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
+      <div className="grid-4" style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
         {[
           { label:"Valor del portfolio", value:fUSD(totalVal), sub:`${properties.length} propiedades`, accent:C.text },
           { label:"Ingreso neto / mes",  value:fUSD(totalNet), sub:`bruto ${fUSD(totalInc)}`,          accent:C.green },
@@ -388,7 +431,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         ))}
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+      <div className="grid-2" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
         <div style={{ ...S.card, borderTop:"3px solid "+C.green }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18 }}>
             <div>
@@ -456,7 +499,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         </div>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:16, marginBottom:16 }}>
+      <div className="grid-2" style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr", gap:16, marginBottom:16 }}>
         <div style={S.card}>
           <div style={{ fontSize:15, fontWeight:700, marginBottom:4 }}>Ingresos últimos 6 meses</div>
           <div style={{ fontSize:12, color:C.textSec, marginBottom:20 }}>En USD</div>
@@ -531,13 +574,22 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
     { id:4, nombre:"Otros",               monto:5000  },
   ];
 
-  function parseGastos(raw) {
-    if (!raw) return defaultGastos;
-    if (Array.isArray(raw)) return raw;
-    try { return JSON.parse(raw); } catch { return defaultGastos; }
+  function parseGastos(pv) {
+    if (!pv) return defaultGastos;
+    const count = pv["gastos_count"];
+    if (!count || count === 0) return defaultGastos;
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      result.push({
+        id:     pv["gastos_" + i + "_id"]     || i + 1,
+        nombre: pv["gastos_" + i + "_nombre"] || "",
+        monto:  pv["gastos_" + i + "_monto"]  || 0,
+      });
+    }
+    return result.length > 0 ? result : defaultGastos;
   }
 
-  const [gastos,setGastos]=useState(() => parseGastos(pinnedValues?.gastos));
+  const [gastos,setGastos]=useState(() => parseGastos(pinnedValues));
   const [nuevoNombre,setNuevoNombre]=useState("");
   const [nuevoMonto,setNuevoMonto]=useState("");
   const [targetGanancia,setTargetGanancia]=useState(pinnedValues?.targetGanancia||200);
