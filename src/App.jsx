@@ -81,6 +81,7 @@ const NAV = [
   { id:"equilibrio",   label:"Punto de Equilibrio",  emoji:"⚖" },
   { id:"properties",   label:"Propiedades",          emoji:"🏠" },
   { id:"bookings",     label:"Reservas",             emoji:"📅" },
+  { id:"movimientos",  label:"Movimientos",          emoji:"🗂" },
   { id:"transactions", label:"Transacciones",        emoji:"💳" },
   { id:"analytics",    label:"Análisis",             emoji:"📊" },
 ];
@@ -262,7 +263,7 @@ export default function App() {
 
   if (!user) return <Login onLogin={setUser}/>;
 
-  const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db };
+  const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db, setPage };
 
   return (
     <div className="rentar-layout" style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
@@ -314,6 +315,7 @@ export default function App() {
           : page==="equilibrio"   ? <Equilibrio   {...shared}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
+          : page==="movimientos"  ? <Movimientos  {...shared}/>
           : page==="transactions" ? <Transactions {...shared}/>
           :                         <Analytics    {...shared}/>}
       </main>
@@ -776,7 +778,7 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
 }
 
 // ── PROPIEDADES ───────────────────────────────────────────────────────────────
-function Properties({ properties, transactions, tc, reload, db, pinnedValues, pinValue }) {
+function Properties({ properties, transactions, tc, reload, db, pinnedValues, pinValue, setPage }) {
   const [showForm,setShowForm]=useState(false);
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState("");
@@ -793,7 +795,8 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
       await reload();
       setShowForm(false);
       setForm({name:"",type:"fixed_rental",address:"",bedrooms:1,sqm:0,estimatedValueUSD:0,purchasePriceUSD:0,monthlyIncomeARS:0,monthlyExpensesARS:0,status:"rented",description:""});
-    } catch(e){setError("Error: "+e.message);}
+      setPage("dashboard");
+    } catch(e){setError("Error al guardar. Verificá las reglas de Firestore: " + e.message);}
     finally{setSaving(false);}
   }
 
@@ -975,7 +978,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
               <div style={{fontSize:18,fontWeight:700}}>Nueva propiedad</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
             </div>
-            {error&&<div style={{background:C.redLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:16}}>{error}</div>}
+            {error&&<div style={{background:C.redLight,border:"1px solid #fca5a5",borderRadius:10,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:16,fontWeight:500}}>{error}</div>}
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               <div><label style={S.label}>Nombre *</label><input style={S.input} placeholder="Depto 1 · Palermo" value={form.name} onChange={e=>setF("name",e.target.value)}/></div>
               <div><label style={S.label}>Dirección</label><input style={S.input} placeholder="Av. Santa Fe 1234, CABA" value={form.address} onChange={e=>setF("address",e.target.value)}/></div>
@@ -1009,7 +1012,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 }
 
 // ── RESERVAS ──────────────────────────────────────────────────────────────────
-function Bookings({ properties, bookings, tc, reload, db }) {
+function Bookings({ properties, bookings, tc, reload, db, setPage }) {
   const [showForm,setShowForm]=useState(false);
   const [year,setYear]=useState(new Date().getFullYear());
   const [month,setMonth]=useState(new Date().getMonth());
@@ -1069,8 +1072,25 @@ function Bookings({ properties, bookings, tc, reload, db }) {
       setShowForm(false);
       setForm({guestName:"",guestEmail:"",guestPhone:"",checkIn:"",checkOut:"",source:"direct",status:"confirmed",notes:""});
       setCommPct(0);
-    } catch{setError("Error al guardar.");}
+    } catch(e){setError("Error al guardar: " + e.message);}
     finally{setSaving(false);}
+  }
+
+  async function deleteBooking(id, guestName) {
+    if (!confirm(`¿Eliminar la reserva de ${guestName}? Esta acción no se puede deshacer.`)) return;
+    try {
+      // Move to movimientos before deleting
+      const bk = bookings.find(b => b.id === id);
+      if (bk) {
+        await addDoc(collection(db, "re_movimientos"), {
+          ...bk,
+          tipo: "reserva_eliminada",
+          eliminadaEn: serverTimestamp(),
+        });
+      }
+      await deleteDoc(doc(db, "re_bookings", id));
+      await reload();
+    } catch(e) { alert("Error al eliminar: " + e.message); }
   }
 
   const monthIncome=bookings.filter(b=>b.propertyId===propId&&b.status!=="cancelled"&&new Date(b.checkIn).getMonth()===month).reduce((s,b)=>s+(b.totalNetoARS||b.totalARS||0),0);
@@ -1140,15 +1160,20 @@ function Bookings({ properties, bookings, tc, reload, db }) {
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {bookings.filter(b=>b.status==="confirmed").sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).map(b=>(
                     <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                        <div style={{fontSize:14,fontWeight:600}}>{b.guestName}</div>
-                        <div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:600}}>{b.guestName}</div>
+                          <div style={{fontSize:12,color:C.textSec,marginTop:2}}>{b.checkIn} → {b.checkOut} · {b.nights} noches</div>
+                          {b.source&&<div style={{fontSize:11,color:C.textMuted,marginTop:2,textTransform:"capitalize"}}>Fuente: {b.source}{b.commissionPct>0?` (${b.commissionPct}%)`:""}</div>}
+                        </div>
+                        <div style={{textAlign:"right",marginLeft:10}}>
                           <div style={{fontSize:14,fontWeight:700,color:C.green}}>{fARS(b.totalNetoARS||b.totalARS)}</div>
-                          {b.comisionARS>0&&<div style={{fontSize:10,color:C.red,textAlign:"right"}}>−{fARS(b.comisionARS)} comisión</div>}
+                          {b.comisionARS>0&&<div style={{fontSize:10,color:C.red}}>−{fARS(b.comisionARS)} com.</div>}
+                          <button onClick={()=>deleteBooking(b.id,b.guestName)} style={{marginTop:6,background:C.redLight,border:"none",color:C.red,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                            🗑 Eliminar
+                          </button>
                         </div>
                       </div>
-                      <div style={{fontSize:12,color:C.textSec}}>{b.checkIn} → {b.checkOut} · {b.nights} noches</div>
-                      {b.source&&<div style={{fontSize:11,color:C.textMuted,marginTop:3,textTransform:"capitalize"}}>Fuente: {b.source}{b.commissionPct>0?` (${b.commissionPct}%)`:""}</div>}
                     </div>
                   ))}
                 </div>
@@ -1165,7 +1190,7 @@ function Bookings({ properties, bookings, tc, reload, db }) {
               <div style={{fontSize:18,fontWeight:700}}>Nueva reserva</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
             </div>
-            {error&&<div style={{background:C.redLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:16}}>{error}</div>}
+            {error&&<div style={{background:C.redLight,border:"1px solid #fca5a5",borderRadius:10,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:16,fontWeight:500}}>{error}</div>}
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               <div><label style={S.label}>Huésped *</label><input style={S.input} value={form.guestName} onChange={e=>setF("guestName",e.target.value)} placeholder="Juan Pérez"/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
@@ -1241,7 +1266,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
       await reload();
       setShowForm(false);setAmountARS("");
       setForm({propertyId:"",category:"rent",date:todayStr(),description:""});
-    } catch{setError("Error al guardar.");}
+    } catch(e){setError("Error al guardar: " + e.message);}
     finally{setSaving(false);}
   }
 
@@ -1317,7 +1342,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
               <div style={{fontSize:18,fontWeight:700}}>Nueva transacción</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
             </div>
-            {error&&<div style={{background:C.redLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.red,marginBottom:16}}>{error}</div>}
+            {error&&<div style={{background:C.redLight,border:"1px solid #fca5a5",borderRadius:10,padding:"12px 14px",fontSize:13,color:C.red,marginBottom:16,fontWeight:500}}>{error}</div>}
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
               <div style={{display:"flex",gap:8}}>
                 {["income","expense"].map(t=>(
@@ -1341,6 +1366,72 @@ function Transactions({ properties, transactions, tc, reload, db }) {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MOVIMIENTOS ──────────────────────────────────────────────────────────────
+function Movimientos({ db }) {
+  const [movimientos, setMovimientos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDocs(query(collection(db, "re_movimientos"), orderBy("eliminadaEn", "desc")))
+      .then(snap => {
+        setMovimientos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      })
+      .catch(e => console.error(e))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function deleteMovimiento(id) {
+    if (!confirm("¿Eliminar este registro del historial?")) return;
+    await deleteDoc(doc(db, "re_movimientos", id));
+    setMovimientos(m => m.filter(x => x.id !== id));
+  }
+
+  return (
+    <div style={{ animation:"fadeIn 0.25s ease" }}>
+      <div style={{ marginBottom:32 }}>
+        <h1 style={{ fontSize:26, fontWeight:800, letterSpacing:"-0.5px" }}>Movimientos</h1>
+        <p style={{ color:C.textSec, fontSize:14, marginTop:5 }}>Historial de reservas eliminadas</p>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign:"center", padding:60, color:C.textMuted }}>Cargando...</div>
+      ) : movimientos.length === 0 ? (
+        <div style={{ ...S.card, textAlign:"center", padding:60 }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>🗂</div>
+          <div style={{ fontSize:16, fontWeight:600, marginBottom:8 }}>Sin movimientos</div>
+          <div style={{ color:C.textSec }}>Las reservas eliminadas aparecerán acá</div>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {movimientos.map(m => (
+            <div key={m.id} style={{ ...S.card, display:"flex", alignItems:"center", gap:16 }}>
+              <div style={{ width:44, height:44, borderRadius:12, background:C.redLight, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>🗑</div>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:14, fontWeight:700 }}>{m.guestName}</span>
+                  <span style={{ fontSize:11, background:C.redLight, color:C.red, padding:"2px 8px", borderRadius:20, fontWeight:600 }}>Reserva eliminada</span>
+                </div>
+                <div style={{ fontSize:12, color:C.textSec }}>{m.checkIn} → {m.checkOut} · {m.nights} noches</div>
+                <div style={{ fontSize:12, color:C.textSec, marginTop:2 }}>
+                  Total: <span style={{ fontWeight:600 }}>{fARS(m.totalNetoARS || m.totalARS || 0)}</span>
+                  {m.source && <span style={{ marginLeft:8, textTransform:"capitalize" }}>· {m.source}</span>}
+                </div>
+              </div>
+              <div style={{ textAlign:"right" }}>
+                <div style={{ fontSize:13, fontWeight:700, color:C.red }}>{fUSD(m.totalUSD || 0)}</div>
+                <button onClick={() => deleteMovimiento(m.id)}
+                  style={{ marginTop:6, background:"none", border:"1px solid "+C.border, color:C.textMuted, borderRadius:6, padding:"3px 8px", fontSize:11, cursor:"pointer" }}>
+                  Limpiar
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
