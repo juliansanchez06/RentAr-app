@@ -503,6 +503,8 @@ export default function App() {
           h1{font-size:20px!important}
           .header-right .tc-hide{display:none!important}
           .modal-box{padding:16px!important;border-radius:16px!important;margin:10px!important;max-width:calc(100vw - 20px)!important}
+          .booking-modal-grid{grid-template-columns:1fr!important}
+          .booking-modal-col-right{border-left:none!important;border-top:1px solid #e8eaed!important}
         }
         @media(max-width:480px){
           .grid-4{grid-template-columns:1fr 1fr!important}
