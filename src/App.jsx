@@ -570,7 +570,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         </div>
         <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Portfolio total</div>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fUSD(properties.reduce((s,p)=>s+(p.estimatedValueUSD||0),0)||124000)}</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fUSD(totalVal)}</div>
           <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{properties.length} propiedad{properties.length!==1?"es":""} activa{properties.length!==1?"s":""}</div>
         </div>
       </div>
