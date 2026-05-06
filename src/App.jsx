@@ -1271,8 +1271,16 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         <div style={{marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:4}}>🧮 Simulador de precio</div>
           <div style={{fontSize:18,fontWeight:800,letterSpacing:"-0.5px"}}>Matriz personas × noches</div>
-          <div style={{fontSize:12,color:C.textSec,marginTop:4}}>
-            Precio por noche según grupo y duración · Gastos fijos: {fUSD(totalGastosUSD)}/mes · Meta: {fUSD(targetGanancia)}/mes
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:4}}>
+            <span style={{fontSize:12,color:C.textSec}}>Gastos: {fUSD(totalGastosUSD)}/mes · Meta: {fUSD(targetGanancia)}/mes</span>
+            <span style={{
+              fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
+              background:platform==="direct"?C.greenLight:platform==="airbnb"?"#fff0f0":"#e8f0fe",
+              color:platform==="direct"?C.green:platform==="airbnb"?"#ff5a5f":"#003580",
+            }}>
+              {platform==="direct"?"✓ Sin comisión":platform==="airbnb"?`Airbnb −${commAirbnb}%`:`Booking −${commBooking}%`}
+            </span>
+            <span style={{fontSize:11,color:C.textMuted}}>· Mínimo {minNights} {minNights===1?"noche":"noches"}</span>
           </div>
         </div>
 
@@ -1293,9 +1301,9 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                       background:!pm.available?C.redLight:n===7||n===14?C.greenLight:C.bg,
                       color:!pm.available?C.red:n===7||n===14?C.green:C.textSec,
                       borderLeft:"1px solid "+C.border,
-                      minWidth:100,
+                      minWidth:110,
                     }}>
-                      <div>{n} {n===1?"noche":"noches"}</div>
+                      <div style={{fontSize:13,fontWeight:800}}>{n} {n===1?"noche":"noches"}</div>
                       <div style={{fontSize:10,fontWeight:600,color:pm.color}}>{pm.tag}</div>
                       {!pm.available&&<div style={{fontSize:9,color:C.red}}>⚠ bajo mínimo</div>}
                     </th>
@@ -1318,10 +1326,11 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
 
                 return (
                   <tr key={personas} style={{borderBottom:"1px solid "+C.border,background:ri%2===0?C.bg:C.white}}>
-                    <td style={{padding:"12px 14px",fontWeight:700}}>
-                      <div>{label}</div>
+                    <td style={{padding:"12px 14px",fontWeight:700,background:ri%2===0?C.bg:C.white}}>
+                      <div style={{fontSize:13}}>{label}</div>
                       {descPct>0&&<div style={{fontSize:10,color:C.yellow,fontWeight:600}}>−{descPct}% desc. grupo</div>}
-                      <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{fARS(tarifaPers)}/n base</div>
+                      <div style={{fontSize:12,fontWeight:700,color:C.text,marginTop:4}}>{fARS(tarifaPers)}/n</div>
+                      <div style={{fontSize:11,fontWeight:600,color:C.green}}>{fUSD(arsToUsd(tarifaPers,tc))}/n</div>
                     </td>
                     {[1,2,3,5,7,10,14].map(noches=>{
                       const pm = pricingMultiplier(noches);
@@ -1355,14 +1364,25 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                             <>
                               {/* Precio por noche */}
                               <div style={{fontSize:14,fontWeight:800,color:C.text}}>{fARS(precioNoche)}</div>
-                              <div style={{fontSize:10,color:C.textMuted,marginBottom:4}}>/noche</div>
+                              <div style={{fontSize:10,color:C.green,fontWeight:600}}>{fUSD(arsToUsd(precioNoche,tc))}</div>
+                              <div style={{fontSize:9,color:C.textMuted,marginBottom:4}}>/noche</div>
 
-                              {/* Total de la estadía */}
-                              <div style={{fontSize:11,fontWeight:600,color:C.blue}}>
-                                {fARS(neto)} neto
+                              {/* Separador */}
+                              <div style={{width:"100%",height:1,background:C.border,margin:"4px 0"}}/>
+
+                              {/* Total neto de la estadía */}
+                              <div style={{fontSize:11,fontWeight:700,color:C.blue}}>
+                                {fARS(neto)}
                               </div>
-                              {commPct>0&&<div style={{fontSize:9,color:C.red}}>−{fARS(comision)} com.</div>}
-                              <div style={{fontSize:10,color:C.textMuted}}>{fUSD(netoUSD)}</div>
+                              <div style={{fontSize:11,fontWeight:700,color:C.green}}>
+                                {fUSD(netoUSD)}
+                              </div>
+                              <div style={{fontSize:9,color:C.textMuted}}>neto estadía</div>
+                              {commPct>0&&(
+                                <div style={{fontSize:9,color:C.red,marginTop:2}}>
+                                  −{fARS(comision)} {platform==="airbnb"?"Airbnb":"Booking"}
+                                </div>
+                              )}
 
                               {/* Cuántas reservas necesito */}
                               <div style={{
