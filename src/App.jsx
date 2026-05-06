@@ -114,44 +114,26 @@ function Login({ onLogin }) {
   }
 
   return (
-    <div style={{ minHeight:"100vh", background:C.white, display:"flex", fontFamily:"'Inter', system-ui, sans-serif" }}>
-      <div style={{ width:"45%", background:"linear-gradient(160deg,#1e3a6e 0%,#1e40af 60%,#1d4ed8 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:60, position:"relative", overflow:"hidden" }}>
-        <div style={{ position:"absolute", top:-80, right:-80, width:300, height:300, borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
-        <div style={{ position:"absolute", bottom:-60, left:-60, width:250, height:250, borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
-        <img src={LOGO} alt="RentAr" style={{ width:220, marginBottom:32, filter:"brightness(0) invert(1)", position:"relative", zIndex:1 }}/>
-        <p style={{ color:"rgba(255,255,255,0.85)", fontSize:15, textAlign:"center", maxWidth:280, lineHeight:1.7, position:"relative", zIndex:1 }}>
-          Gestioná tu portfolio inmobiliario, analizá la rentabilidad y tomá decisiones financieras inteligentes.
-        </p>
-        <div style={{ display:"flex", gap:32, marginTop:48, position:"relative", zIndex:1 }}>
-          {[{value:"2",label:"Propiedades"},{value:"USD",label:"En dólares"},{value:"TIR",label:"Calculada"}].map(({value,label})=>(
-            <div key={label} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:22, fontWeight:800, color:"#fff" }}>{value}</div>
-              <div style={{ fontSize:11, color:"rgba(255,255,255,0.6)", marginTop:2 }}>{label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:60 }}>
-        <div style={{ width:"100%", maxWidth:380 }}>
-          <img src={LOGO} alt="RentAr" style={{ width:130, marginBottom:32, display:"block" }}/>
-          <h1 style={{ fontSize:26, fontWeight:800, color:C.text, margin:"0 0 6px", letterSpacing:"-0.5px" }}>Bienvenido</h1>
-          <p style={{ color:C.textSec, fontSize:14, margin:"0 0 32px" }}>Ingresá con tu cuenta de RentAr</p>
-          {error && <div style={{ background:C.redLight, border:"1px solid #fca5a5", borderRadius:10, padding:"10px 14px", fontSize:13, color:C.red, marginBottom:20 }}>{error}</div>}
-          <form onSubmit={handleLogin} style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            <div>
-              <label style={S.label}>Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="tu@email.com" autoFocus/>
-            </div>
-            <div>
-              <label style={S.label}>Contraseña</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="••••••••"/>
-            </div>
-            <button type="submit" disabled={loading} style={{ ...S.btn, width:"100%", justifyContent:"center", marginTop:8, background:"linear-gradient(135deg,#1e3a6e,#1d4ed8)", padding:"14px 0", fontSize:15, borderRadius:12, opacity:loading?0.7:1 }}>
-              {loading?"Ingresando...":"Ingresar →"}
-            </button>
-          </form>
-          <p style={{ fontSize:12, color:C.textMuted, marginTop:24, textAlign:"center" }}>Plataforma privada · Solo acceso autorizado</p>
-        </div>
+    <div style={{ minHeight:"100vh", background:C.white, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Inter', system-ui, sans-serif" }}>
+      <div style={{ width:"100%", maxWidth:420, padding:40 }}>
+        <img src={LOGO} alt="RentAr" style={{ width:180, display:"block", margin:"0 auto 32px" }}/>
+        <h1 style={{ fontSize:26, fontWeight:800, color:C.text, margin:"0 0 6px", letterSpacing:"-0.5px", textAlign:"center" }}>Bienvenido</h1>
+        <p style={{ color:C.textSec, fontSize:14, margin:"0 0 32px", textAlign:"center" }}>Ingresá con tu cuenta de RentAr</p>
+        {error && <div style={{ background:C.redLight, border:"1px solid #fca5a5", borderRadius:10, padding:"10px 14px", fontSize:13, color:C.red, marginBottom:20 }}>{error}</div>}
+        <form onSubmit={handleLogin} style={{ display:"flex", flexDirection:"column", gap:16 }}>
+          <div>
+            <label style={S.label}>Email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="tu@email.com" autoFocus/>
+          </div>
+          <div>
+            <label style={S.label}>Contraseña</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} style={{ ...S.input, fontSize:15 }} placeholder="••••••••"/>
+          </div>
+          <button type="submit" disabled={loading} style={{ ...S.btn, width:"100%", justifyContent:"center", marginTop:8, background:"linear-gradient(135deg,#1e3a6e,#1d4ed8)", padding:"14px 0", fontSize:15, borderRadius:12, opacity:loading?0.7:1 }}>
+            {loading?"Ingresando...":"Ingresar →"}
+          </button>
+        </form>
+        <p style={{ fontSize:12, color:C.textMuted, marginTop:24, textAlign:"center" }}>Plataforma privada · Solo acceso autorizado</p>
       </div>
     </div>
   );
