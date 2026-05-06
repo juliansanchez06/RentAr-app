@@ -301,7 +301,7 @@ export default function App() {
       </nav>
 
       <aside className="sidebar" style={{ width:240, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50, boxShadow:"2px 0 20px rgba(0,0,0,0.05)" }}>
-        <div className="sidebar-logo" style={{ padding:"20px 20px 16px", borderBottom:"1px solid "+C.border, textAlign:"center", background:"linear-gradient(180deg,#f0f4ff,#fff)" }}>
+        <div className="sidebar-logo" style={{ padding:"20px 20px 16px", borderBottom:"1px solid "+C.border, textAlign:"center", background:C.white }}>
           <img src={LOGO} alt="RentAr" style={{ width:130, display:"block", margin:"0 auto" }}/>
           <div style={{ marginTop:8, fontSize:10, color:C.textMuted, letterSpacing:"1.5px", textTransform:"uppercase", fontWeight:600 }}>Gestión Inmobiliaria</div>
         </div>
@@ -354,7 +354,7 @@ export default function App() {
       {/* Mobile top bar */}
       <div className="mobile-header" style={{ display:"none" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px", background:C.white, borderBottom:"1px solid "+C.border, position:"fixed", top:0, left:0, right:0, zIndex:99, boxShadow:"0 2px 10px rgba(0,0,0,0.06)" }}>
-          <img src={LOGO} alt="RentAr" style={{ height:32 }}/>
+          <img src={LOGO} alt="RentAr" style={{ height:32, background:"#fff", borderRadius:6, padding:"2px 4px" }}/>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:3, background:C.bg, borderRadius:8, padding:"5px 10px", border:"1px solid "+C.border }}>
               <span style={{ fontSize:11, color:C.textMuted, fontWeight:600 }}>MEP</span>
@@ -407,16 +407,18 @@ export default function App() {
             box-shadow:0 -4px 20px rgba(0,0,0,0.1)!important;
           }
           .mobile-header{display:block!important}
-          .main-content{margin-left:0!important;padding:80px 12px 90px!important}
+          .main-content{margin-left:0!important;padding:80px 12px 90px!important;min-height:100vh!important;background:#f7f8fa!important}
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-2{grid-template-columns:1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
           .grid-6{grid-template-columns:repeat(3,1fr)!important}
+          .eq-grid{grid-template-columns:1fr!important}
           table{font-size:11px!important}
           table td,table th{padding:8px 10px!important}
           h1{font-size:20px!important}
           .hide-mobile{display:none!important}
-          .modal-box{padding:20px!important;margin:12px!important}
+          .modal-box{padding:16px!important;border-radius:16px!important}
+          .rentar-layout{background:#f7f8fa!important;min-height:100vh!important}
         }
         @media(max-width:480px){
           .grid-4{grid-template-columns:1fr 1fr!important}
@@ -436,7 +438,8 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const d1=properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
   const d2=properties.find(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
 
-  const inc1ARS = d1 ? (transactions.filter(t=>t.propertyId===d1.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3||476670) : 476670;
+  const txInc1 = transactions.filter(t=>t.propertyId===d1?.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3;
+  const inc1ARS = d1 ? (d1.monthlyIncomeARS || txInc1 || 476670) : 476670;
   const inc1USD=arsToUsd(inc1ARS,tc), net1USD=inc1USD, val1=d1?.estimatedValueUSD||67000;
   const cap1=val1>0?(net1USD*12/val1)*100:0, pb1=net1USD>0?val1/(net1USD*12):null;
 
@@ -729,7 +732,7 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
         </div>
       </div>
 
-      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:20}}>
+      <div className="grid-2 eq-grid" style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:20}}>
         <div style={S.card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:15,fontWeight:700}}>Gastos fijos mensuales</div>
