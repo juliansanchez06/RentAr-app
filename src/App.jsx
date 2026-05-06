@@ -74,16 +74,26 @@ const S = {
   btnGreen: { background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 },
   btnSec:   { background:C.white, color:C.textSec, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 18px", fontSize:14, cursor:"pointer", fontWeight:500 },
   modal:    { position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", backdropFilter:"blur(6px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
-  modalBox: { background:C.white, border:"1px solid "+C.border, borderRadius:20, padding:28, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:C.shadowMd },
+  modalBox: { background:C.white, border:"1px solid "+C.border, borderRadius:20, padding:28, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:C.shadowMd, margin:"0 auto" },
 };
+const NAV_ICONS = {
+  dashboard:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
+  equilibrio:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>,
+  properties:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  bookings:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  movimientos:  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
+  transactions: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
+  analytics:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+};
+
 const NAV = [
-  { id:"dashboard",    label:"Dashboard",            emoji:"⬛" },
-  { id:"equilibrio",   label:"Punto de Equilibrio",  emoji:"⚖" },
-  { id:"properties",   label:"Propiedades",          emoji:"🏠" },
-  { id:"bookings",     label:"Reservas",             emoji:"📅" },
-  { id:"movimientos",  label:"Movimientos",          emoji:"🗂" },
-  { id:"transactions", label:"Transacciones",        emoji:"💳" },
-  { id:"analytics",    label:"Análisis",             emoji:"📊" },
+  { id:"dashboard",    label:"Dashboard",            short:"Inicio"   },
+  { id:"equilibrio",   label:"Punto de Equilibrio",  short:"Equilibrio" },
+  { id:"properties",   label:"Propiedades",          short:"Propied." },
+  { id:"bookings",     label:"Reservas",             short:"Reservas" },
+  { id:"movimientos",  label:"Movimientos",          short:"Movim."   },
+  { id:"transactions", label:"Transacciones",        short:"Transac." },
+  { id:"analytics",    label:"Análisis",             short:"Análisis" },
 ];
 
 function PinBtn({ pinKey, value, pinnedValues, pinValue }) {
@@ -273,18 +283,27 @@ export default function App() {
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setPage(n.id)} style={{
             flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-            gap:3, padding:"8px 4px", border:"none", background:"transparent",
+            gap:3, padding:"8px 2px", border:"none",
+            background:page===n.id?"linear-gradient(180deg,#dbeafe,#fff)":"transparent",
             color:page===n.id?C.blue:C.textMuted, cursor:"pointer", minWidth:0,
+            borderTop:page===n.id?"2px solid "+C.blue:"2px solid transparent",
+            transition:"all 0.15s",
           }}>
-            <span style={{ fontSize:18, lineHeight:1 }}>{n.emoji}</span>
-            <span style={{ fontSize:9, fontWeight:page===n.id?700:400, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%" }}>{n.label}</span>
+            <span style={{ display:"flex", alignItems:"center", justifyContent:"center", width:28, height:28, borderRadius:8,
+              background:page===n.id?C.blue:"transparent", color:page===n.id?"#fff":C.textMuted,
+              transition:"all 0.15s",
+            }}>
+              {NAV_ICONS[n.id]}
+            </span>
+            <span style={{ fontSize:8.5, fontWeight:page===n.id?700:400, whiteSpace:"nowrap" }}>{n.short}</span>
           </button>
         ))}
       </nav>
 
-      <aside className="sidebar" style={{ width:230, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50 }}>
-        <div className="sidebar-logo" style={{ padding:"18px 20px 14px", borderBottom:"1px solid "+C.border, textAlign:"center" }}>
+      <aside className="sidebar" style={{ width:240, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50, boxShadow:"2px 0 20px rgba(0,0,0,0.05)" }}>
+        <div className="sidebar-logo" style={{ padding:"20px 20px 16px", borderBottom:"1px solid "+C.border, textAlign:"center", background:"linear-gradient(180deg,#f0f4ff,#fff)" }}>
           <img src={LOGO} alt="RentAr" style={{ width:130, display:"block", margin:"0 auto" }}/>
+          <div style={{ marginTop:8, fontSize:10, color:C.textMuted, letterSpacing:"1.5px", textTransform:"uppercase", fontWeight:600 }}>Gestión Inmobiliaria</div>
         </div>
         <div className="sidebar-fb" style={{ padding:"6px 14px 6px", borderBottom:"1px solid "+C.border }}>
           <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow }}>
@@ -294,10 +313,22 @@ export default function App() {
         </div>
         <nav style={{ flex:1, padding:"10px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>setPage(n.id)} style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 12px", borderRadius:10, border:"none", cursor:"pointer", background:page===n.id?C.bg:"transparent", color:page===n.id?C.blue:C.textSec, fontSize:13.5, fontWeight:page===n.id?700:400, textAlign:"left", width:"100%" }}>
-              <span style={{ fontSize:16 }}>{n.emoji}</span>
-              <span className="nav-label">{n.label}</span>
-              {page===n.id&&<div style={{ marginLeft:"auto", width:5, height:5, borderRadius:"50%", background:C.blue, flexShrink:0 }}/>}
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              display:"flex", alignItems:"center", gap:10,
+              padding:"10px 14px", borderRadius:12, border:"none", cursor:"pointer",
+              background:page===n.id?"linear-gradient(135deg,#dbeafe,#ede9fe)":"transparent",
+              color:page===n.id?C.blue:C.textSec,
+              fontSize:13.5, fontWeight:page===n.id?700:400,
+              textAlign:"left", width:"100%",
+              transition:"all 0.18s ease",
+              boxShadow:page===n.id?"0 2px 8px rgba(37,99,235,0.15)":"none",
+              transform:page===n.id?"translateX(2px)":"translateX(0)",
+            }}>
+              <span style={{ color:page===n.id?C.blue:C.textMuted, display:"flex", alignItems:"center", flexShrink:0 }}>
+                {NAV_ICONS[n.id]}
+              </span>
+              <span className="nav-label" style={{ flex:1 }}>{n.label}</span>
+              {page===n.id&&<div style={{ width:6, height:6, borderRadius:"50%", background:C.blue, flexShrink:0, animation:"pulse 2s infinite" }}/>}
             </button>
           ))}
         </nav>
@@ -322,20 +353,21 @@ export default function App() {
       </aside>
       {/* Mobile top bar */}
       <div className="mobile-header" style={{ display:"none" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background:C.white, borderBottom:"1px solid "+C.border, position:"fixed", top:0, left:0, right:0, zIndex:99 }}>
-          <img src={LOGO} alt="RentAr" style={{ height:36 }}/>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:4, background:C.bg, borderRadius:8, padding:"6px 10px" }}>
-              <span style={{ fontSize:12, color:C.textMuted }}>MEP $</span>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px", background:C.white, borderBottom:"1px solid "+C.border, position:"fixed", top:0, left:0, right:0, zIndex:99, boxShadow:"0 2px 10px rgba(0,0,0,0.06)" }}>
+          <img src={LOGO} alt="RentAr" style={{ height:32 }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:3, background:C.bg, borderRadius:8, padding:"5px 10px", border:"1px solid "+C.border }}>
+              <span style={{ fontSize:11, color:C.textMuted, fontWeight:600 }}>MEP</span>
+              <span style={{ fontSize:11, color:C.textMuted }}>$</span>
               <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
-                style={{ width:60, fontSize:14, fontWeight:700, color:C.green, border:"none", background:"transparent", outline:"none" }}/>
+                style={{ width:55, fontSize:14, fontWeight:800, color:C.green, border:"none", background:"transparent", outline:"none", fontFamily:"inherit" }}/>
             </div>
-            <button onClick={handleLogout} style={{ background:"none", border:"none", fontSize:12, color:C.red, cursor:"pointer" }}>Salir</button>
+            <button onClick={handleLogout} style={{ background:C.redLight, border:"none", fontSize:11, color:C.red, cursor:"pointer", padding:"5px 10px", borderRadius:8, fontWeight:600 }}>Salir</button>
           </div>
         </div>
       </div>
 
-      <main className="main-content" style={{ flex:1, marginLeft:230, padding:"36px 40px", minHeight:"100vh" }}>
+      <main className="main-content" style={{ flex:1, marginLeft:240, padding:"36px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
             <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid "+C.border, borderTopColor:C.blue, animation:"spin 0.8s linear infinite" }}/>
@@ -361,23 +393,36 @@ export default function App() {
         ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
         button:hover{opacity:0.85}
         select option{background:white}
-        @media(max-width:768px){
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.3)}}
+        @keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+        @keyframes popIn{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
+        .nav-btn-active{animation:slideIn 0.2s ease}
+        @media(max-width:900px){
           .rentar-layout{flex-direction:column!important}
           .sidebar{display:none!important}
           .mobile-nav{
             display:flex!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;
             background:white!important;border-top:1px solid #e8eaed!important;
-            z-index:100!important;padding:4px 0 8px!important;
-            box-shadow:0 -2px 12px rgba(0,0,0,0.08)!important;
+            z-index:100!important;padding:4px 0 env(safe-area-inset-bottom,8px)!important;
+            box-shadow:0 -4px 20px rgba(0,0,0,0.1)!important;
           }
-          .main-content{
-            margin-left:0!important;padding:16px 12px 90px!important;
-          }
+          .mobile-header{display:block!important}
+          .main-content{margin-left:0!important;padding:80px 12px 90px!important}
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-2{grid-template-columns:1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
-          .mobile-header{display:block!important}
-          .main-content{padding-top:70px!important}
+          .grid-6{grid-template-columns:repeat(3,1fr)!important}
+          table{font-size:11px!important}
+          table td,table th{padding:8px 10px!important}
+          h1{font-size:20px!important}
+          .hide-mobile{display:none!important}
+          .modal-box{padding:20px!important;margin:12px!important}
+        }
+        @media(max-width:480px){
+          .grid-4{grid-template-columns:1fr 1fr!important}
+          .grid-3{grid-template-columns:1fr 1fr!important}
+          .grid-6{grid-template-columns:repeat(2,1fr)!important}
+          .main-content{padding:72px 10px 88px!important}
         }
       `}</style>
     </div>
@@ -684,7 +729,7 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:20}}>
+      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:20}}>
         <div style={S.card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <div style={{fontSize:15,fontWeight:700}}>Gastos fijos mensuales</div>
@@ -869,7 +914,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
           <button onClick={()=>setShowForm(true)} style={S.btn}>+ Agregar propiedad</button>
         </div>
       ):(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+        <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
           {properties.map(p=>{
             const st=statusMap[p.status]||{label:p.status,color:C.textSec,bg:C.bg};
             const isEditing=editingId===p.id;
@@ -936,7 +981,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
                     </div>
                   </div>
                 ):(
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
+                  <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
                     {[
                       {label:"Tipo",  value:p.type==="fixed_rental"?"Renta fija":"Temporal"},
                       {label:"Valor", value:fUSD(p.estimatedValueUSD)},
@@ -965,7 +1010,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
                   ))}
                 </div>
 
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
                   {[
                     {label:"Cap Rate",  value:cap>0?fPct(cap):"—",         color:cap>4?C.green:cap>0?C.yellow:C.textMuted},
                     {label:"Payback",   value:payback?payback.toFixed(1)+" años":"—", color:payback&&payback<20?C.green:C.yellow},
@@ -994,7 +1039,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 
       {showForm&&(
         <div style={S.modal}>
-          <div style={S.modalBox}>
+          <div className="modal-box" style={S.modalBox}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
               <div style={{fontSize:18,fontWeight:700}}>Nueva propiedad</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
@@ -1137,7 +1182,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
         <div style={{...S.card,textAlign:"center",padding:60,color:C.textMuted}}><div style={{fontSize:40,marginBottom:12}}>📅</div><div>No tenés propiedades de renta temporal</div></div>
       ):(
         <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
+          <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
             {[
               {label:"Ingresos netos del mes",value:fARS(monthIncome),sub:fUSD(monthIncome/tc),color:C.green},
               {label:"Noches ocupadas",value:String(occupiedNights),sub:Math.round(occupiedNights/daysInMonth*100)+"% del mes"},
@@ -1150,7 +1195,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
               </div>
             ))}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+          <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
             <div style={S.card}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
                 <button onClick={()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);}} style={{...S.btnSec,padding:"7px 14px"}}>‹</button>
@@ -1209,7 +1254,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
 
       {showForm&&(
         <div style={S.modal}>
-          <div style={S.modalBox}>
+          <div className="modal-box" style={S.modalBox}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
               <div style={{fontSize:18,fontWeight:700}}>Nueva reserva</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
@@ -1307,7 +1352,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
         <button onClick={()=>setShowForm(true)} style={S.btn}>+ Nueva transacción</button>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
+      <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
         {[
           {label:"Ingresos totales",value:fUSD(totals.income), color:C.green,icon:"↑"},
           {label:"Egresos totales", value:fUSD(totals.expense),color:C.red,  icon:"↓"},
@@ -1331,7 +1376,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
         ))}
       </div>
 
-      <div style={{...S.card,padding:0,overflow:"hidden"}}>
+      <div style={{...S.card,padding:0,overflow:"hidden",overflowX:"auto"}}>
         {filtered.length===0?(
           <div style={{textAlign:"center",padding:60,color:C.textMuted}}><div style={{fontSize:36,marginBottom:12}}>💳</div><div>No hay transacciones</div></div>
         ):(
@@ -1361,7 +1406,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
 
       {showForm&&(
         <div style={S.modal}>
-          <div style={S.modalBox}>
+          <div className="modal-box" style={S.modalBox}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:24}}>
               <div style={{fontSize:18,fontWeight:700}}>Nueva transacción</div>
               <button onClick={()=>setShowForm(false)} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
@@ -1659,7 +1704,7 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
           </div>
 
           {/* Tabla flujo */}
-          <div style={{...S.card,padding:0,overflow:"hidden",marginBottom:18}}>
+          <div style={{...S.card,padding:0,overflow:"hidden",overflowX:"auto",marginBottom:18}}>
             <div style={{padding:"18px 24px",borderBottom:"1px solid "+C.border}}><div style={{fontSize:15,fontWeight:700}}>Tabla de flujo de caja</div></div>
             <div style={{maxHeight:280,overflowY:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -1693,7 +1738,7 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
           <div style={S.card}>
             <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>Pricing dinámico · Depto 2</div>
             <div style={{fontSize:12,color:C.textSec,marginBottom:18}}>Base $70.000/noche · Fee limpieza $15.000</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
+            <div className="grid-6" style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10}}>
               {pricingExamples.map(({nights,total,perNight})=>(
                 <div key={nights} style={{background:nights===1?C.yellowLight:nights>=7?C.greenLight:C.bg,border:"1px solid "+(nights===1?C.yellow+"44":nights>=7?C.green+"44":C.border),borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
                   <div style={{fontSize:11,color:C.textMuted,marginBottom:6}}>{nights} {nights===1?"noche":"noches"}</div>
