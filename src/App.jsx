@@ -1881,7 +1881,9 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   const shortProps=properties.filter(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
   const [propId,setPropId]=useState(shortProps[0]?.id||"");
   const [commPct,setCommPct]=useState(0);
-  const [form,setForm]=useState({guestName:"",guestEmail:"",guestPhone:"",checkIn:"",checkOut:"",source:"direct",status:"confirmed",notes:""});
+  const [form,setForm]=useState({guestName:"",guestEmail:"",guestPhone:"",checkIn:"",checkOut:"",source:"direct",status:"confirmed",notes:"",personas:3});
+  const [precioManual,setPrecioManual]=useState("");
+  const [precioSelIdx,setPrecioSelIdx]=useState(-1);
 
   useEffect(()=>{ if(shortProps.length>0&&!propId) setPropId(shortProps[0].id); },[shortProps.length]);
   function setF(f,v){setForm(p=>({...p,[f]:v}));}
@@ -1901,6 +1903,14 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
 
   const nights       = form.checkIn&&form.checkOut?Math.max(0,Math.round((new Date(form.checkOut)-new Date(form.checkIn))/86400000)):0;
   const minNightsVal = pinnedValues?.minNights||2;
+  const tarifaBaseV  = pinnedValues?.tarifaBase||70000;
+  const desc2PersV   = pinnedValues?.desc2Pers||10;
+  const desc1PersV   = pinnedValues?.desc1Pers||20;
+  const tarifaPersonas = form.personas===1
+    ? Math.round(tarifaBaseV*(1-desc1PersV/100))
+    : form.personas===2
+    ? Math.round(tarifaBaseV*(1-desc2PersV/100))
+    : tarifaBaseV;
   const tarifaBaseV  = pinnedValues?.tarifaBase||70000;
   const desc2PersV   = pinnedValues?.desc2Pers||10;
   const desc1PersV   = pinnedValues?.desc1Pers||20;
