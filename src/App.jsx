@@ -283,81 +283,107 @@ export default function App() {
         position:"fixed", top:0, left:0, right:0, zIndex:100,
         background:"#fff",
         borderBottom:"1px solid "+C.border,
-        boxShadow:"0 2px 16px rgba(0,0,0,0.07)",
-        display:"flex", alignItems:"center",
-        height:64, padding:"0 24px", gap:0,
+        boxShadow:"0 2px 16px rgba(0,0,0,0.06)",
+        display:"flex", flexDirection:"column",
       }}>
-        {/* Logo */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0, marginRight:24 }}>
-          <img src={LOGO} alt="RentAr" style={{ height:44, width:"auto", background:"#fff", borderRadius:10 }}/>
-        </div>
+        {/* Fila 1: Logo + TC + Usuario */}
+        <div style={{
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"10px 28px", borderBottom:"1px solid "+C.border,
+          background:"linear-gradient(135deg,#0f2156 0%,#1e3a6e 60%,#1565c0 100%)",
+          minHeight:54,
+        }}>
+          {/* Logo en contenedor blanco */}
+          <div style={{
+            background:"#fff", borderRadius:12, padding:"4px 14px",
+            display:"flex", alignItems:"center",
+            boxShadow:"0 2px 12px rgba(0,0,0,0.15)",
+          }}>
+            <img src={LOGO} alt="RentAr" style={{ height:38, width:"auto", display:"block" }}/>
+          </div>
 
-        {/* Divider */}
-        <div style={{ width:1, height:32, background:C.border, marginRight:16, flexShrink:0 }}/>
-
-        {/* Nav tabs */}
-        <nav style={{ display:"flex", alignItems:"center", gap:2, flex:1, overflowX:"auto" }}>
-          {NAV.map(n=>(
-            <button key={n.id} onClick={()=>setPage(n.id)} style={{
-              display:"flex", alignItems:"center", gap:7,
-              padding:"8px 14px", borderRadius:10, border:"none", cursor:"pointer",
-              background:page===n.id?"linear-gradient(135deg,#eff6ff,#ede9fe)":"transparent",
-              color:page===n.id?C.blue:C.textSec,
-              fontSize:13, fontWeight:page===n.id?700:500,
-              whiteSpace:"nowrap", flexShrink:0,
-              transition:"all 0.15s ease",
-              boxShadow:page===n.id?"0 2px 8px rgba(37,99,235,0.12)":"none",
-              borderBottom:page===n.id?"2px solid "+C.blue:"2px solid transparent",
-            }}>
-              <span style={{ color:page===n.id?C.blue:C.textMuted, display:"flex", flexShrink:0 }}>
-                {NAV_ICONS[n.id]}
-              </span>
-              <span className="nav-label-top">{n.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        {/* Right side: Firebase + TC + user */}
-        <div className="header-right" style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0, marginLeft:16 }}>
-          {/* Firebase status */}
+          {/* Firebase dot */}
           <div title={"Firebase "+fbStatus} style={{
-            width:8, height:8, borderRadius:"50%",
+            width:8, height:8, borderRadius:"50%", marginLeft:12,
             background:fbStatus==="connected"?C.green:fbStatus==="error"?C.red:C.yellow,
-            flexShrink:0,
+            flexShrink:0, boxShadow:fbStatus==="connected"?"0 0 6px "+C.green:"none",
           }}/>
 
-          {/* TC widget */}
+          <div style={{flex:1}}/>
+
+          {/* TC */}
           <div style={{
-            display:"flex", alignItems:"center", gap:6,
-            background:C.bg, borderRadius:10, padding:"6px 12px",
-            border:"1px solid "+C.border,
+            display:"flex", alignItems:"center", gap:8,
+            background:"rgba(255,255,255,0.12)", borderRadius:10,
+            padding:"6px 14px", border:"1px solid rgba(255,255,255,0.2)",
+            marginRight:14,
           }}>
-            <span style={{ fontSize:11, color:C.textMuted, fontWeight:600, whiteSpace:"nowrap" }}>MEP $</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:600}}>MEP $</span>
             <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
-              style={{ width:64, fontSize:15, fontWeight:800, color:C.green, border:"none", background:"transparent", outline:"none", fontFamily:"inherit" }}/>
+              style={{width:68,fontSize:15,fontWeight:800,color:"#fff",border:"none",
+                background:"transparent",outline:"none",fontFamily:"inherit"}}/>
             <PinBtn pinKey="tc" value={tc} pinnedValues={pinnedValues} pinValue={pinValue}/>
           </div>
 
-          {/* User + logout */}
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {/* Avatar + salir */}
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{
-              width:32, height:32, borderRadius:"50%",
-              background:"linear-gradient(135deg,#2563eb,#7c3aed)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              color:"#fff", fontSize:13, fontWeight:800,
+              width:34,height:34,borderRadius:"50%",
+              background:"linear-gradient(135deg,#60a5fa,#a78bfa)",
+              display:"flex",alignItems:"center",justifyContent:"center",
+              color:"#fff",fontSize:14,fontWeight:800,
+              boxShadow:"0 2px 8px rgba(0,0,0,0.2)",
             }}>
               {user?.email?.[0]?.toUpperCase()}
             </div>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.8)",fontWeight:500}}>
+              {user?.email?.split("@")[0]}
+            </span>
             <button onClick={handleLogout} style={{
-              background:C.redLight, border:"none", color:C.red,
-              borderRadius:8, padding:"6px 12px", fontSize:12,
-              fontWeight:600, cursor:"pointer",
+              background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",
+              color:"#fff",borderRadius:8,padding:"5px 12px",
+              fontSize:12,fontWeight:600,cursor:"pointer",
             }}>Salir</button>
           </div>
         </div>
+
+        {/* Fila 2: Pestañas — siempre todas visibles */}
+        <div className="header-tabs" style={{
+          display:"flex", alignItems:"stretch",
+          padding:"0 16px", background:"#fff",
+          height:44, overflow:"hidden",
+        }}>
+          {NAV.map((n,i)=>(
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{
+              flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+              gap:5, border:"none", cursor:"pointer",
+              background:"transparent",
+              color:page===n.id?C.blue:C.textSec,
+              fontSize:11.5, fontWeight:page===n.id?700:500,
+              borderBottom:page===n.id?"3px solid "+C.blue:"3px solid transparent",
+              borderRight:i<NAV.length-1?"1px solid "+C.border:"none",
+              transition:"all 0.15s ease",
+              padding:"0 4px",
+              whiteSpace:"nowrap",
+              minWidth:0,
+            }}
+            onMouseEnter={e=>{if(page!==n.id){e.currentTarget.style.background=C.bg;e.currentTarget.style.color=C.blue;}}}
+            onMouseLeave={e=>{if(page!==n.id){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.textSec;}}}
+            >
+              <span style={{
+                display:"flex",flexShrink:0,
+                color:page===n.id?C.blue:C.textMuted,
+                transition:"color 0.15s",
+              }}>
+                {NAV_ICONS[n.id]}
+              </span>
+              <span className="nav-txt">{n.label}</span>
+            </button>
+          ))}
+        </div>
       </header>
 
-      {/* ── MOBILE BOTTOM NAV ─────────────────────────────────────────── */}
+            {/* ── MOBILE BOTTOM NAV ─────────────────────────────────────────── */}
       <nav className="mobile-nav" style={{ display:"none" }}>
         {NAV.map(n=>(
           <button key={n.id} onClick={()=>setPage(n.id)} style={{
@@ -383,7 +409,7 @@ export default function App() {
         ))}
       </nav>
 
-            <main className="main-content" style={{ flex:1, marginLeft:0, padding:"84px 40px 40px", minHeight:"100vh" }}>
+            <main className="main-content" style={{ flex:1, marginLeft:0, padding:"102px 40px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
             <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid "+C.border, borderTopColor:C.blue, animation:"spin 0.8s linear infinite" }}/>
@@ -416,16 +442,14 @@ export default function App() {
         .nav-item-wrap:hover .nav-tooltip{opacity:1!important}
         .nav-item-wrap button:hover{background:${C.bg}!important;color:${C.blue}!important}
         @media(max-width:900px){
-          header nav{display:none!important}
-          header .nav-right-hide{display:none!important}
-          header{padding:0 14px!important;justify-content:space-between!important}
+          .header-tabs{display:none!important}
           .mobile-nav{
             display:flex!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;
             background:white!important;border-top:1px solid #e8eaed!important;
             z-index:100!important;padding:4px 0 env(safe-area-inset-bottom,8px)!important;
             box-shadow:0 -4px 20px rgba(0,0,0,0.1)!important;
           }
-          .main-content{padding:76px 12px 90px!important;min-height:100vh!important}
+          .main-content{padding:62px 12px 90px!important;min-height:100vh!important}
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-2{grid-template-columns:1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
