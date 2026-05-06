@@ -614,20 +614,17 @@ function Equilibrio({ tc, pinnedValues, pinValue }) {
   const totalGastosUSD=arsToUsd(totalGastosARS,tc);
   const ingresoNecesarioARS=(totalGastosUSD+targetGanancia)*tc;
 
-  async function saveGastos() {
+  async function pinValue(key,value) {
     try {
-      const cleanGastos = gastos.map((g, i) => ({
-        id: i + 1,
-        nombre: String(g.nombre || ""),
-        monto: Number(g.monto || 0),
-      }));
-      await pinValue("gastos", JSON.stringify(cleanGastos));
-      await pinValue("targetGanancia", Number(targetGanancia));
-      setGastosSaved(true);
-      setTimeout(()=>setGastosSaved(false), 2500);
+      const toStore = typeof value === "object" ? JSON.stringify(value) : value;
+      const updated = { ...pinnedValues, [key]: toStore };
+      setPinnedValues(updated);
+      console.log("pinValue saving:", key, toStore);
+      const result = await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+      console.log("pinValue saved OK:", key);
     } catch(e) {
-      console.error("saveGastos error:", e);
-      alert("Error al guardar gastos: " + e.message);
+      console.error("pinValue FAILED:", key, e.code, e.message);
+      alert("Error: " + e.code + " - " + e.message);
     }
   }
 
