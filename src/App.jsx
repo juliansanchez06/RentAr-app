@@ -50,13 +50,14 @@ function calcIRR(inv, annual, terminal, yrs) {
   return Math.max(r*100,0);
 }
 
-function calcPricing(nights, base, clean, commPct=0, minNights=2) {
+function calcPricing(nights, base, cleaningCostPerNight=0, commPct=0, minNights=2) {
+  // cleaningCostPerNight = costo interno tuyo, NO se cobra al huésped
   let rate=base, label="Estándar", available=true, warningMsg="";
 
   if (nights < minNights) {
     available = false;
     warningMsg = `Mínimo ${minNights} noches`;
-    rate = base * 1.5; // precio disuasorio
+    rate = base * 1.5;
     label = `⚠ Mínimo ${minNights} noches`;
   } else if (nights === 1) {
     rate = base * 1.5;
@@ -69,20 +70,33 @@ function calcPricing(nights, base, clean, commPct=0, minNights=2) {
     label = "−25% estadía mensual";
   } else if (nights === 21) {
     rate = base * 0.8;
-    label = "−20% descuento 3 semanas";
+    label = "−20% 3 semanas";
   } else if (nights === 14) {
     rate = base * 0.85;
-    label = "−15% descuento 2 semanas";
+    label = "−15% 2 semanas";
   } else if (nights === 7) {
     rate = base * 0.9;
-    label = "−10% descuento semanal";
+    label = "−10% semanal";
   } else {
     label = "Precio estándar";
   }
 
-  const bruto    = Math.round(rate * nights + clean);
-  const comision = Math.round(bruto * commPct / 100);
-  return { total:bruto, neto:bruto-comision, comision, perNight:Math.round(rate), label, available, warningMsg };
+  const perNight    = Math.round(rate);
+  const bruto       = perNight * nights;           // lo que paga el huésped
+  const costoLimpieza = cleaningCostPerNight * nights; // costo tuyo interno
+  const comision    = Math.round(bruto * commPct / 100);
+  const netoHuesped = bruto - comision;            // lo que recibís vos
+  const netoReal    = netoHuesped - costoLimpieza; // ganancia real descontando limpieza
+
+  return {
+    total: bruto,           // precio bruto al huésped (sin limpieza)
+    neto: netoHuesped,      // lo que recibís después de comisión
+    netoReal,               // ganancia real (descontando limpieza interna)
+    comision,
+    costoLimpieza,
+    perNight,
+    label, available, warningMsg,
+  };
 }
 
 const C = {
@@ -1336,10 +1350,12 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                       const pm = pricingMultiplier(noches);
                       // Precio con multiplicador de noches aplicado sobre tarifa de personas
                       const precioNoche = Math.round(tarifaPers * pm.mult);
-                      const cleanFee    = 15000;
-                      const bruto       = precioNoche * noches + cleanFee;
+                      const costoLimpiezaNoche = 5000; // costo interno por noche, no se cobra al huésped
+                      const bruto       = precioNoche * noches; // solo precio × noches, sin limpieza
                       const comision    = Math.round(bruto * commPct / 100);
-                      const neto        = bruto - comision;
+                      const netoComision= bruto - comision;
+                      const costoLimp   = costoLimpiezaNoche * noches;
+                      const neto        = netoComision - costoLimp; // ganancia real
                       const netoUSD     = arsToUsd(neto, tc);
                       const gastosUSD   = totalGastosUSD;
 
@@ -1370,17 +1386,18 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                               {/* Separador */}
                               <div style={{width:"100%",height:1,background:C.border,margin:"4px 0"}}/>
 
-                              {/* Total neto de la estadía */}
-                              <div style={{fontSize:11,fontWeight:700,color:C.blue}}>
-                                {fARS(neto)}
-                              </div>
-                              <div style={{fontSize:11,fontWeight:700,color:C.green}}>
-                                {fUSD(netoUSD)}
-                              </div>
-                              <div style={{fontSize:9,color:C.textMuted}}>neto estadía</div>
-                              {commPct>0&&(
-                                <div style={{fontSize:9,color:C.red,marginTop:2}}>
-                                  −{fARS(comision)} {platform==="airbnb"?"Airbnb":"Booking"}
+                              {/* Huésped paga */}
+                              <div style={{fontSize:11,fontWeight:700,color:C.text}}>{fARS(bruto)}</div>
+                              <div style={{fontSize:10,color:C.textMuted}}>huésped paga</div>
+
+                              {/* Yo recibo */}
+                              <div style={{fontSize:11,fontWeight:700,color:C.green,marginTop:3}}>{fARS(neto)}</div>
+                              <div style={{fontSize:10,color:C.green,fontWeight:600}}>{fUSD(netoUSD)}</div>
+                              <div style={{fontSize:9,color:C.textMuted}}>recibís vos</div>
+                              {(commPct>0||costoLimp>0)&&(
+                                <div style={{fontSize:8,color:C.red,marginTop:1}}>
+                                  {commPct>0?`−${fARS(comision)} com.`:""}
+                                  {costoLimp>0?` −${fARS(costoLimp)} limp.`:""}
                                 </div>
                               )}
 
@@ -2105,13 +2122,41 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
               )}
               {pricing&&(
                 <div style={{background:pricing.available===false?C.redLight:C.greenLight,borderRadius:12,padding:"14px 16px",border:pricing.available===false?"1px solid "+C.red:"none"}}>
-                  <div style={{fontSize:13,fontWeight:600,color:pricing.available===false?C.red:C.green,marginBottom:6}}>{nights} noches · {pricing.label}</div>
-                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <div><div style={{fontSize:11,color:C.textSec}}>Total bruto</div><div style={{fontSize:16,fontWeight:700}}>{fARS(pricing.total)}</div></div>
-                    {pricing.comision>0&&<div><div style={{fontSize:11,color:C.red}}>Comisión ({commPct}%)</div><div style={{fontSize:16,fontWeight:700,color:C.red}}>−{fARS(pricing.comision)}</div></div>}
-                    <div><div style={{fontSize:11,color:C.green}}>Neto</div><div style={{fontSize:18,fontWeight:800,color:C.green}}>{fARS(pricing.neto)}</div></div>
+                  <div style={{fontSize:13,fontWeight:600,color:pricing.available===false?C.red:C.green,marginBottom:10}}>{nights} noches · {pricing.label}</div>
+
+                  {/* Lo que paga el huésped */}
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,color:C.textSec,marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>Lo que paga el huésped</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:20,fontWeight:800,color:C.text}}>{fARS(pricing.total)}</div>
+                        <div style={{fontSize:12,color:C.textSec}}>{fARS(pricing.perNight)}/noche × {nights} noches</div>
+                        <div style={{fontSize:12,color:C.green,fontWeight:600}}>{fUSD(arsToUsd(pricing.total,tc))}</div>
+                      </div>
+                      {pricing.comision>0&&(
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:11,color:C.red}}>−{fARS(pricing.comision)}</div>
+                          <div style={{fontSize:10,color:C.red}}>comisión {commPct}%</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div style={{fontSize:11,color:C.textSec,marginTop:6}}>{fARS(pricing.perNight)}/noche + $15.000 limpieza · {fUSD(arsToUsd(pricing.neto,tc))} USD</div>
+
+                  {/* Lo que recibís vos */}
+                  <div style={{borderTop:"1px solid rgba(0,0,0,0.1)",paddingTop:10}}>
+                    <div style={{fontSize:11,color:C.textSec,marginBottom:4,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px"}}>Lo que recibís vos</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:18,fontWeight:800,color:C.green}}>{fARS(pricing.netoReal)}</div>
+                        <div style={{fontSize:11,color:C.textMuted}}>Después de comisión y limpieza interna</div>
+                        <div style={{fontSize:12,color:C.green,fontWeight:600}}>{fUSD(arsToUsd(pricing.netoReal,tc))}</div>
+                      </div>
+                      <div style={{textAlign:"right",fontSize:11,color:C.textMuted}}>
+                        {pricing.comision>0&&<div>−{fARS(pricing.comision)} comisión</div>}
+                        <div>−{fARS(pricing.costoLimpieza)} limpieza</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
               <div style={{display:"flex",gap:10}}>
@@ -2416,7 +2461,7 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
   const irrReal = irr - infUSD;
 
   const minNightsAn = pinnedValues?.minNights||2;
-  const pricingExamples = [1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,15000,0,minNightsAn)}));
+  const pricingExamples = [1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,5000,0,minNightsAn)})); // 5000/noche limpieza interna
 
   const TABS = [
     {id:"flujo",         label:"Flujo de caja"},
