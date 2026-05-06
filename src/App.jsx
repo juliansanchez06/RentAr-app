@@ -50,13 +50,33 @@ function calcIRR(inv, annual, terminal, yrs) {
   return Math.max(r*100,0);
 }
 
-function calcPricing(nights, base, clean, commPct=0) {
-  let rate=base, label="Estándar";
-  if (nights===1) { rate=base*1.2; label="+20% tarifa 1 noche"; }
-  else if (nights>=7) { rate=base*0.9; label="-10% descuento semanal"; }
-  const bruto=Math.round(rate*nights+clean);
-  const comision=Math.round(bruto*commPct/100);
-  return { total:bruto, neto:bruto-comision, comision, perNight:Math.round(rate), label };
+function calcPricing(nights, base, clean, commPct=0, minNights=2) {
+  let rate=base, label="Estándar", available=true, warningMsg="";
+
+  if (nights < minNights) {
+    available = false;
+    warningMsg = `Mínimo ${minNights} noches`;
+    rate = base * 1.5; // precio disuasorio
+    label = `⚠ Mínimo ${minNights} noches`;
+  } else if (nights === 1) {
+    rate = base * 1.5;
+    label = "+50% tarifa 1 noche";
+  } else if (nights === 2) {
+    rate = base * 1.2;
+    label = "+20% tarifa 2 noches";
+  } else if (nights >= 30) {
+    rate = base * 0.75;
+    label = "−25% estadía mensual";
+  } else if (nights >= 7) {
+    rate = base * 0.9;
+    label = "−10% descuento semanal";
+  } else if (nights >= 3) {
+    label = "Precio estándar";
+  }
+
+  const bruto    = Math.round(rate * nights + clean);
+  const comision = Math.round(bruto * commPct / 100);
+  return { total:bruto, neto:bruto-comision, comision, perNight:Math.round(rate), label, available, warningMsg };
 }
 
 const C = {
@@ -898,6 +918,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
   const [gastosSaved,setGastosSaved]   = useState(false);
   const [saveMsg,setSaveMsg]           = useState("");
   const [moneda,setMoneda]             = useState("ARS"); // ARS o USD por gasto
+  const [minNights,setMinNights]       = useState(pinnedValues?.minNights||2);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
 
@@ -932,6 +953,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         targetGanancia: Number(targetGanancia),
         commAirbnb: Number(commAirbnb),
         commBooking: Number(commBooking),
+        minNights: Number(minNights),
       }, { merge: true });
 
       setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
@@ -949,24 +971,63 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
     setNuevoNombre(""); setNuevoMonto(""); setGastosSaved(false);
   }
 
-  const escenarios=[5,8,10,12,15,20,25].map(noches=>{
-    const cleaningFeeTotal=15000*Math.ceil(noches/3);
-    const brutoNecesario=Math.ceil((ingresoNecesarioARS+cleaningFeeTotal)/(1-commPct/100)/noches/1000)*1000;
-    const ingresoBruto=brutoNecesario*noches+cleaningFeeTotal;
-    const comision=Math.round(ingresoBruto*commPct/100);
-    const ingresoNeto=ingresoBruto-comision;
-    const gananciaUSD=arsToUsd(ingresoNeto-totalGastosARS-cleaningFeeTotal,tc);
-    return {noches,brutoNecesario,ingresoBruto,comision,ingresoNeto,cleaningFeeTotal,gananciaUSD,ocupacion:Math.round(noches/30*100)};
+  // Política de precios según noches
+  function pricingMultiplier(noches) {
+    if (noches < minNights) return { mult:1.5, tag:"⚠ Bajo mínimo", color:C.red, available:false };
+    if (noches === 1)        return { mult:1.5, tag:"+50%",          color:C.red, available:false };
+    if (noches === 2)        return { mult:1.2, tag:"+20%",          color:C.yellow, available:true };
+    if (noches >= 30)        return { mult:0.75, tag:"−25% mensual", color:C.blue, available:true };
+    if (noches >= 7)         return { mult:0.9, tag:"−10% semanal",  color:C.green, available:true };
+    return { mult:1.0, tag:"Estándar", color:C.text, available:true };
+  }
+
+  const escenarios=[1,2,3,5,7,10,12,15,20,25].map(noches=>{
+    const pm = pricingMultiplier(noches);
+    const cleaningFeeTotal = noches >= 7 ? 15000 : noches >= 3 ? 15000*Math.ceil(noches/3) : 15000;
+    const ingresoNecBase = ingresoNecesarioARS / pm.mult;
+    const brutoNecesario = Math.ceil((ingresoNecBase+cleaningFeeTotal)/(1-commPct/100)/noches/1000)*1000;
+    const ingresoBruto   = brutoNecesario*noches+cleaningFeeTotal;
+    const comision       = Math.round(ingresoBruto*commPct/100);
+    const ingresoNeto    = ingresoBruto-comision;
+    const gananciaUSD    = arsToUsd(ingresoNeto-totalGastosARS-cleaningFeeTotal,tc);
+    return {noches,brutoNecesario,ingresoBruto,comision,ingresoNeto,cleaningFeeTotal,gananciaUSD,
+      ocupacion:Math.round(noches/30*100), pm};
   });
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
-      <div style={{marginBottom:24}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>⚖ Rentabilidad · Depto 2</div>
-        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>
-          ¿A cuánto alquilar <span style={{color:C.blue}}>por noche</span>?
-        </h1>
-        <p style={{color:C.textSec,fontSize:13,marginTop:6}}>Calculá tu precio ideal según gastos, ocupación y ganancia deseada</p>
+      <div style={{marginBottom:24,display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>⚖ Rentabilidad · Depto 2</div>
+          <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>
+            ¿A cuánto alquilar <span style={{color:C.blue}}>por noche</span>?
+          </h1>
+          <p style={{color:C.textSec,fontSize:13,marginTop:6}}>Calculá tu precio ideal según gastos, ocupación y ganancia deseada</p>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:12,background:C.white,borderRadius:12,padding:"12px 16px",border:"1px solid "+C.border,boxShadow:C.shadow}}>
+          <div>
+            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Mínimo de noches</div>
+            <div style={{display:"flex",gap:6}}>
+              {[1,2,3].map(n=>(
+                <button key={n} onClick={()=>setMinNights(n)} style={{
+                  width:36,height:36,borderRadius:8,border:"1.5px solid "+(minNights===n?C.blue:C.border),
+                  background:minNights===n?C.blue:"transparent",
+                  color:minNights===n?"#fff":C.textSec,
+                  fontWeight:700,fontSize:15,cursor:"pointer",
+                }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{borderLeft:"1px solid "+C.border,paddingLeft:12}}>
+            <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>Política activa</div>
+            <div style={{fontSize:13,fontWeight:700,color:C.blue}}>
+              {minNights===1?"Sin mínimo":minNights===2?"Mínimo 2 noches":"Mínimo 3 noches"}
+            </div>
+            <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>
+              {minNights===1?"Acepta estadías de 1 noche":minNights===2?"+20% para 2 noches":"+50% para menos de 3"}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Comisiones */}
@@ -1147,18 +1208,19 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
               const esOptimo=e.noches===12;
               return (
                 <div key={e.noches} style={{
-                  display:"grid",gridTemplateColumns:"50px 1fr 1fr 80px 50px",
+                  display:"grid",gridTemplateColumns:"60px 1fr 1fr 80px 60px",
                   alignItems:"center",gap:8,padding:"10px",borderRadius:10,
-                  background:esOptimo?C.bg:"transparent",
-                  border:"1px solid "+(esOptimo?C.borderMed:C.border),
+                  background:!e.pm.available?C.redLight:esOptimo?C.bg:"transparent",
+                  border:"1px solid "+(!e.pm.available?C.red:esOptimo?C.borderMed:C.border),
+                  opacity:!e.pm.available?0.7:1,
                 }}>
                   <div style={{textAlign:"center"}}>
-                    <div style={{fontSize:17,fontWeight:800,color:esRentable?C.text:C.textMuted}}>{e.noches}</div>
-                    <div style={{fontSize:9,color:C.textMuted}}>noches</div>
+                    <div style={{fontSize:17,fontWeight:800,color:e.pm.available?(esRentable?C.text:C.textMuted):C.red}}>{e.noches}</div>
+                    <div style={{fontSize:9,color:e.pm.color,fontWeight:600}}>{e.pm.tag}</div>
                   </div>
                   <div>
-                    <div style={{fontSize:13,fontWeight:700}}>{fARS(e.brutoNecesario)}</div>
-                    <div style={{fontSize:10,color:C.textMuted}}>{fUSD(arsToUsd(e.brutoNecesario,tc))}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:!e.pm.available?C.red:C.text}}>{fARS(e.brutoNecesario)}</div>
+                    <div style={{fontSize:10,color:C.textMuted}}>{fUSD(arsToUsd(e.brutoNecesario,tc))}/n</div>
                     {commPct>0&&<div style={{fontSize:10,color:C.red}}>Com: {fARS(e.comision)}</div>}
                   </div>
                   <div>
@@ -1166,13 +1228,15 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                     <div style={{fontSize:10,color:C.textMuted}}>{e.ocupacion}% ocup.</div>
                   </div>
                   <div>
-                    <div style={{fontSize:14,fontWeight:800,color:esRentable?C.green:C.red}}>{fUSD(e.gananciaUSD)}</div>
+                    <div style={{fontSize:14,fontWeight:800,color:!e.pm.available?C.red:esRentable?C.green:C.yellow}}>{fUSD(e.gananciaUSD)}</div>
                     <div style={{fontSize:10,color:C.textMuted}}>{fARS(e.gananciaUSD*tc)}</div>
                   </div>
                   <div style={{textAlign:"center"}}>
-                    {esRentable
-                      ?<span style={{fontSize:13,background:C.greenLight,color:C.green,padding:"4px 8px",borderRadius:20,fontWeight:700}}>✓</span>
-                      :<span style={{fontSize:13,background:C.redLight,color:C.red,padding:"4px 8px",borderRadius:20,fontWeight:700}}>✗</span>}
+                    {!e.pm.available
+                      ?<span style={{fontSize:11,background:C.redLight,color:C.red,padding:"3px 6px",borderRadius:20,fontWeight:700}}>✗ Bloq.</span>
+                      :esRentable
+                        ?<span style={{fontSize:11,background:C.greenLight,color:C.green,padding:"3px 6px",borderRadius:20,fontWeight:700}}>✓ OK</span>
+                        :<span style={{fontSize:11,background:C.yellowLight,color:C.yellow,padding:"3px 6px",borderRadius:20,fontWeight:700}}>Bajo</span>}
                   </div>
                 </div>
               );
@@ -1603,7 +1667,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 }
 
 // ── RESERVAS ──────────────────────────────────────────────────────────────────
-function Bookings({ properties, bookings, tc, reload, db, setPage }) {
+function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues }) {
   const [showForm,setShowForm]=useState(false);
   const [year,setYear]=useState(new Date().getFullYear());
   const [month,setMonth]=useState(new Date().getMonth());
@@ -1807,9 +1871,15 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
                 </div>
               </div>
               <div><label style={S.label}>Estado</label><select style={S.input} value={form.status} onChange={e=>setF("status",e.target.value)}><option value="confirmed">Confirmada</option><option value="blocked">Bloqueado</option></select></div>
+              {nights>0&&nights<minNightsVal&&(
+                <div style={{background:C.redLight,borderRadius:12,padding:"12px 16px",border:"1px solid "+C.red}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.red}}>⚠ Mínimo {minNightsVal} noches requeridas</div>
+                  <div style={{fontSize:12,color:C.red,marginTop:4}}>Esta reserva está por debajo del mínimo configurado en Punto de Equilibrio.</div>
+                </div>
+              )}
               {pricing&&(
-                <div style={{background:C.greenLight,borderRadius:12,padding:"14px 16px"}}>
-                  <div style={{fontSize:13,fontWeight:600,color:C.green,marginBottom:6}}>{nights} noches · {pricing.label}</div>
+                <div style={{background:pricing.available===false?C.redLight:C.greenLight,borderRadius:12,padding:"14px 16px",border:pricing.available===false?"1px solid "+C.red:"none"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:pricing.available===false?C.red:C.green,marginBottom:6}}>{nights} noches · {pricing.label}</div>
                   <div style={{display:"flex",justifyContent:"space-between"}}>
                     <div><div style={{fontSize:11,color:C.textSec}}>Total bruto</div><div style={{fontSize:16,fontWeight:700}}>{fARS(pricing.total)}</div></div>
                     {pricing.comision>0&&<div><div style={{fontSize:11,color:C.red}}>Comisión ({commPct}%)</div><div style={{fontSize:16,fontWeight:700,color:C.red}}>−{fARS(pricing.comision)}</div></div>}
@@ -2119,7 +2189,8 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
   // Real USD ajustado por inflación americana
   const irrReal = irr - infUSD;
 
-  const pricingExamples = [1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,15000,0)}));
+  const minNightsAn = pinnedValues?.minNights||2;
+  const pricingExamples = [1,2,3,5,7,14].map(n=>({nights:n,...calcPricing(n,70000,15000,0,minNightsAn)}));
 
   const TABS = [
     {id:"flujo",         label:"Flujo de caja"},
