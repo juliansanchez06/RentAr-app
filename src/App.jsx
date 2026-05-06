@@ -267,6 +267,20 @@ export default function App() {
 
   return (
     <div className="rentar-layout" style={{ display:"flex", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
+      {/* Mobile bottom nav */}
+      <nav className="mobile-nav" style={{ display:"none" }}>
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setPage(n.id)} style={{
+            flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+            gap:3, padding:"8px 4px", border:"none", background:"transparent",
+            color:page===n.id?C.blue:C.textMuted, cursor:"pointer", minWidth:0,
+          }}>
+            <span style={{ fontSize:18, lineHeight:1 }}>{n.emoji}</span>
+            <span style={{ fontSize:9, fontWeight:page===n.id?700:400, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:"100%" }}>{n.label}</span>
+          </button>
+        ))}
+      </nav>
+
       <aside className="sidebar" style={{ width:230, background:C.white, borderRight:"1px solid "+C.border, display:"flex", flexDirection:"column", position:"fixed", top:0, left:0, bottom:0, zIndex:50 }}>
         <div className="sidebar-logo" style={{ padding:"18px 20px 14px", borderBottom:"1px solid "+C.border, textAlign:"center" }}>
           <img src={LOGO} alt="RentAr" style={{ width:130, display:"block", margin:"0 auto" }}/>
@@ -279,10 +293,10 @@ export default function App() {
         </div>
         <nav style={{ flex:1, padding:"10px 10px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
           {NAV.map(n=>(
-            <button key={n.id} onClick={()=>setPage(n.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, border:"none", cursor:"pointer", background:page===n.id?C.bg:"transparent", color:page===n.id?C.blue:C.textSec, fontSize:13.5, fontWeight:page===n.id?700:400, textAlign:"left", width:"100%" }}>
-              <span style={{ fontSize:14, opacity:0.7 }}>{n.emoji}</span>
-              {n.label}
-              {page===n.id&&<div style={{ marginLeft:"auto", width:5, height:5, borderRadius:"50%", background:C.blue }}/>}
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 12px", borderRadius:10, border:"none", cursor:"pointer", background:page===n.id?C.bg:"transparent", color:page===n.id?C.blue:C.textSec, fontSize:13.5, fontWeight:page===n.id?700:400, textAlign:"left", width:"100%" }}>
+              <span style={{ fontSize:16 }}>{n.emoji}</span>
+              <span className="nav-label">{n.label}</span>
+              {page===n.id&&<div style={{ marginLeft:"auto", width:5, height:5, borderRadius:"50%", background:C.blue, flexShrink:0 }}/>}
             </button>
           ))}
         </nav>
@@ -305,6 +319,21 @@ export default function App() {
           </div>
         </div>
       </aside>
+      {/* Mobile top bar */}
+      <div className="mobile-header" style={{ display:"none" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 16px", background:C.white, borderBottom:"1px solid "+C.border, position:"fixed", top:0, left:0, right:0, zIndex:99 }}>
+          <img src={LOGO} alt="RentAr" style={{ height:36 }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:4, background:C.bg, borderRadius:8, padding:"6px 10px" }}>
+              <span style={{ fontSize:12, color:C.textMuted }}>MEP $</span>
+              <input type="number" value={tc} onChange={e=>setTc(Number(e.target.value))}
+                style={{ width:60, fontSize:14, fontWeight:700, color:C.green, border:"none", background:"transparent", outline:"none" }}/>
+            </div>
+            <button onClick={handleLogout} style={{ background:"none", border:"none", fontSize:12, color:C.red, cursor:"pointer" }}>Salir</button>
+          </div>
+        </div>
+      </div>
+
       <main className="main-content" style={{ flex:1, marginLeft:230, padding:"36px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
@@ -333,38 +362,21 @@ export default function App() {
         select option{background:white}
         @media(max-width:768px){
           .rentar-layout{flex-direction:column!important}
-          .sidebar{
-            width:100%!important;height:auto!important;position:relative!important;
-            flex-direction:column!important;border-right:none!important;
-            border-bottom:1px solid #e8eaed!important;
+          .sidebar{display:none!important}
+          .mobile-nav{
+            display:flex!important;position:fixed!important;bottom:0!important;left:0!important;right:0!important;
+            background:white!important;border-top:1px solid #e8eaed!important;
+            z-index:100!important;padding:4px 0 8px!important;
+            box-shadow:0 -2px 12px rgba(0,0,0,0.08)!important;
           }
-          .sidebar-logo{padding:12px 16px 8px!important}
-          .sidebar-logo img{width:90px!important}
-          .sidebar-fb{display:none!important}
-          .sidebar nav{
-            flex-direction:row!important;padding:4px 8px!important;
-            gap:2px!important;overflow-x:auto!important;flex-wrap:nowrap!important;
+          .main-content{
+            margin-left:0!important;padding:16px 12px 90px!important;
           }
-          .sidebar nav button{
-            padding:7px 10px!important;font-size:12px!important;
-            white-space:nowrap!important;flex-shrink:0!important;min-width:auto!important;
-          }
-          .sidebar-bottom{
-            flex-direction:row!important;padding:8px 12px!important;
-            align-items:center!important;gap:12px!important;
-          }
-          .tc-widget{padding:6px 10px!important;margin-bottom:0!important;flex:1!important}
-          .tc-widget input{font-size:15px!important}
-          .main-content{margin-left:0!important;padding:16px 12px!important}
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-2{grid-template-columns:1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
-          .card-p{padding:16px!important}
-          h1{font-size:20px!important}
-        }
-        @media(max-width:400px){
-          .grid-4{grid-template-columns:1fr 1fr!important}
-          .sidebar nav button span.nav-label{display:none!important}
+          .mobile-header{display:block!important}
+          .main-content{padding-top:70px!important}
         }
       `}</style>
     </div>
@@ -1023,7 +1035,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
   const [commPct,setCommPct]=useState(0);
   const [form,setForm]=useState({guestName:"",guestEmail:"",guestPhone:"",checkIn:"",checkOut:"",source:"direct",status:"confirmed",notes:""});
 
-  useEffect(()=>{if(shortProps.length>0&&!propId)setPropId(shortProps[0].id);},[shortProps]);
+  useEffect(()=>{ if(shortProps.length>0&&!propId) setPropId(shortProps[0].id); },[shortProps.length]);
   function setF(f,v){setForm(p=>({...p,[f]:v}));}
 
   const daysInMonth=new Date(year,month+1,0).getDate();
@@ -1055,7 +1067,10 @@ function Bookings({ properties, bookings, tc, reload, db, setPage }) {
   }
 
   async function save(){
-    if(!form.guestName||!form.checkIn||!form.checkOut||nights<=0){setError("Completá todos los campos.");return;}
+    if(!propId){setError("No hay propiedades de renta temporal seleccionadas.");return;}
+    if(!form.guestName){setError("Ingresá el nombre del huésped.");return;}
+    if(!form.checkIn||!form.checkOut){setError("Ingresá las fechas de check-in y check-out.");return;}
+    if(nights<=0){setError("Las fechas no son válidas. Check-out debe ser posterior al check-in.");return;}
     setSaving(true);setError("");
     try {
       await addDoc(collection(db,"re_bookings"),{
