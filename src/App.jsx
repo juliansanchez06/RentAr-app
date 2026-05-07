@@ -777,10 +777,38 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
             )}
           </div>
 
-          <div style={{display:"flex",justifyContent:"space-between",background:C.yellowLight,borderRadius:10,padding:"10px 14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",background:C.yellowLight,borderRadius:10,padding:"10px 14px",marginBottom:10}}>
             <span style={{fontSize:13,color:C.yellow,fontWeight:500}}>Payback</span>
             <span style={{fontSize:14,fontWeight:800,color:C.yellow}}>{pb2?pb2.toFixed(1)+" años":"Negativo"}</span>
           </div>
+
+          {/* Mini semáforo en Dashboard */}
+          {(()=>{
+            const nowD=new Date();
+            const metaD=pinnedValues?.targetGanancia||200;
+            const gastosD=pinnedValues?.gastos?(()=>{try{const g=JSON.parse(pinnedValues.gastos);return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0);}catch{return 56;}})():56;
+            const metaTotD=metaD+gastosD;
+            const reservasMesD=bookings.filter(b=>{const ci=new Date(b.checkIn);return b.status==="confirmed"&&ci.getMonth()===nowD.getMonth()&&ci.getFullYear()===nowD.getFullYear();});
+            const recaudD=reservasMesD.reduce((s,b)=>s+(b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)),0);
+            const faltaD=Math.max(0,metaTotD-recaudD);
+            const pctD=Math.min(100,Math.round(recaudD/metaTotD*100));
+            const colD=pctD>=100?C.green:pctD>=60?C.yellow:C.red;
+            return (
+              <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",border:"1px solid "+colD+"44"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:11,fontWeight:700,color:colD,textTransform:"uppercase",letterSpacing:"0.5px"}}>Meta {nowD.toLocaleDateString("es-AR",{month:"short"})}</span>
+                  <span style={{fontSize:14,fontWeight:900,color:colD}}>{pctD}%</span>
+                </div>
+                <div style={{width:"100%",height:6,background:C.border,borderRadius:3,overflow:"hidden",marginBottom:6}}>
+                  <div style={{width:pctD+"%",height:"100%",background:colD,borderRadius:3,transition:"width 0.5s"}}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textSec}}>
+                  <span>Recaudado: <strong style={{color:colD}}>{fUSD(recaudD)}</strong></span>
+                  {faltaD>0?<span style={{color:C.red}}>Falta: {fUSD(faltaD)}</span>:<span style={{color:C.green}}>✓ Meta alcanzada</span>}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
@@ -1874,6 +1902,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 // ── RESERVAS ──────────────────────────────────────────────────────────────────
 function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues }) {
   const [showForm,setShowForm]=useState(false);
+  const [selectedBooking,setSelectedBooking]=useState(null);
   const [year,setYear]=useState(new Date().getFullYear());
   const [month,setMonth]=useState(new Date().getMonth());
   const [saving,setSaving]=useState(false);
@@ -2040,6 +2069,38 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   const monthIncome=bookings.filter(b=>b.propertyId===propId&&b.status!=="cancelled"&&new Date(b.checkIn).getMonth()===month).reduce((s,b)=>s+(b.totalNetoARS||b.totalARS||0),0);
   const occupiedNights=Object.values(occupiedMap).filter(b=>b.status!=="blocked"&&new Date(b.checkIn).getMonth()===month).length;
 
+  // ── SEMÁFORO DE META ──────────────────────────────────────────────────────
+  const now2 = new Date();
+  const mesActual = now2.getMonth();
+  const anioActual = now2.getFullYear();
+  const diasEnMes = new Date(anioActual, mesActual+1, 0).getDate();
+  const diaHoy = now2.getDate();
+  const diasRestantes = diasEnMes - diaHoy;
+
+  const metaUSD = pinnedValues?.targetGanancia || 200;
+  const gastosUSD2 = pinnedValues?.gastos
+    ? (()=>{ try{ const g=JSON.parse(pinnedValues.gastos); return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0); }catch{return 56;} })()
+    : 56;
+  const metaTotalUSD = metaUSD + gastosUSD2;
+
+  // Reservas confirmadas este mes
+  const reservasMes = bookings.filter(b=>{
+    const ci = new Date(b.checkIn);
+    return b.status==="confirmed" && ci.getMonth()===mesActual && ci.getFullYear()===anioActual;
+  });
+
+  const recaudadoUSD = reservasMes.reduce((s,b)=>s + (b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)), 0);
+  const faltaUSD = Math.max(0, metaTotalUSD - recaudadoUSD);
+  const pctMeta = Math.min(100, Math.round(recaudadoUSD/metaTotalUSD*100));
+  const nochesConfirmadas = reservasMes.reduce((s,b)=>s+(b.nights||0),0);
+
+  // Sugerencias para llegar a la meta
+  const precioPromedioActual = nochesConfirmadas>0 ? reservasMes.reduce((s,b)=>s+(b.precioNocheUsado||arsToUsd(b.totalARS||0,tc)/Math.max(b.nights||1,1)),0)/reservasMes.length : 0;
+  const nochesNecesariasExtra = faltaUSD>0 && precioPromedioActual>0 ? Math.ceil(faltaUSD/precioPromedioActual) : 0;
+  const precioNecesario = faltaUSD>0 && diasRestantes>0 ? Math.ceil(faltaUSD/Math.max(diasRestantes/2,1)) : 0;
+  const semaforoColor = pctMeta>=100?C.green:pctMeta>=60?C.yellow:C.red;
+  const semaforoLabel = pctMeta>=100?"✅ Meta alcanzada":pctMeta>=60?"⚡ Vas bien, seguí":pctMeta>=30?"⚠ Por debajo de la meta":"🔴 Necesitás tomar acción";
+
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28,flexWrap:"wrap",gap:12}}>
@@ -2052,6 +2113,69 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
           {shortProps.length>1&&<select style={{...S.input,width:200}} value={propId} onChange={e=>setPropId(e.target.value)}>{shortProps.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}
           <button onClick={()=>setShowForm(true)} style={S.btn}>+ Nueva reserva</button>
         </div>
+      </div>
+
+      {/* ── SEMÁFORO DE META ─────────────────────────────────────────────── */}
+      <div style={{...S.card,marginBottom:20,borderLeft:"4px solid "+semaforoColor}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12,marginBottom:14}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:semaforoColor,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:4}}>Meta mensual</div>
+            <div style={{fontSize:18,fontWeight:800}}>{semaforoLabel}</div>
+            <div style={{fontSize:13,color:C.textSec,marginTop:2}}>
+              {now2.toLocaleDateString("es-AR",{month:"long",year:"numeric"})} · {diasRestantes} días restantes
+            </div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:28,fontWeight:900,color:semaforoColor}}>{pctMeta}%</div>
+            <div style={{fontSize:12,color:C.textSec}}>de la meta</div>
+          </div>
+        </div>
+
+        {/* Barra de progreso */}
+        <div style={{width:"100%",height:12,background:C.border,borderRadius:6,overflow:"hidden",marginBottom:14}}>
+          <div style={{
+            width:pctMeta+"%",height:"100%",borderRadius:6,
+            background:pctMeta>=100?C.green:pctMeta>=60?C.yellow:C.red,
+            transition:"width 0.5s ease",
+          }}/>
+        </div>
+
+        {/* KPIs semáforo */}
+        <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+          {[
+            {label:"Recaudado",    value:fUSD(recaudadoUSD),    color:semaforoColor},
+            {label:"Meta total",   value:fUSD(metaTotalUSD),    color:C.textSec},
+            {label:"Falta",        value:faltaUSD>0?fUSD(faltaUSD):"✓ Cumplida", color:faltaUSD>0?C.red:C.green},
+            {label:"Noches conf.", value:nochesConfirmadas+"n", color:C.blue},
+          ].map(({label,value,color})=>(
+            <div key={label} style={{background:C.bg,borderRadius:10,padding:"10px 12px"}}>
+              <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4}}>{label}</div>
+              <div style={{fontSize:16,fontWeight:800,color}}>{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Sugerencias para llegar a meta */}
+        {faltaUSD>0&&(
+          <div style={{background:"linear-gradient(135deg,#eff6ff,#ede9fe)",borderRadius:12,padding:"12px 16px"}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.blue,marginBottom:8}}>💡 Para llegar a tu meta te sugerimos:</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div style={{background:C.white,borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>Opción A · Más noches</div>
+                <div style={{fontSize:15,fontWeight:800,color:C.blue}}>+{nochesNecesariasExtra} noches</div>
+                <div style={{fontSize:11,color:C.textSec}}>al precio actual</div>
+              </div>
+              <div style={{background:C.white,borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>Opción B · Subir precio</div>
+                <div style={{fontSize:15,fontWeight:800,color:C.blue}}>{fUSD(precioNecesario)}/n</div>
+                <div style={{fontSize:11,color:C.textSec}}>con las noches actuales</div>
+              </div>
+            </div>
+            <div style={{marginTop:10,fontSize:12,color:C.blue}}>
+              💎 <strong>Combinado óptimo:</strong> +{Math.ceil(nochesNecesariasExtra/2)} noches a {fUSD(Math.ceil(precioNecesario*0.6))}/n alcanza la meta con margen.
+            </div>
+          </div>
+        )}
       </div>
 
       {shortProps.length===0?(
@@ -2126,6 +2250,121 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
             </div>
           </div>
         </>
+      )}
+
+      {/* ── MODAL DETALLE RESERVA ────────────────────────────────────────── */}
+      {selectedBooking&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(6px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"12px"}}>
+          <div style={{background:C.white,borderRadius:20,width:"100%",maxWidth:560,boxShadow:"0 24px 60px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:"#fff"}}>{selectedBooking.guestName}</div>
+                <div style={{fontSize:12,color:"rgba(255,255,255,0.6)",marginTop:2}}>
+                  {selectedBooking.checkIn} → {selectedBooking.checkOut} · {selectedBooking.nights} noches
+                </div>
+              </div>
+              <button onClick={()=>setSelectedBooking(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+            </div>
+
+            <div style={{padding:"20px 24px"}}>
+              {/* Info huésped */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                {[
+                  {label:"Email",      value:selectedBooking.guestEmail||"—"},
+                  {label:"Teléfono",   value:selectedBooking.guestPhone||"—"},
+                  {label:"Plataforma", value:selectedBooking.source||"Directa"},
+                  {label:"Personas",   value:(selectedBooking.personas||1)+" persona"+(selectedBooking.personas>1?"s":"")},
+                  {label:"Estado",     value:selectedBooking.status==="confirmed"?"✓ Confirmada":"Bloqueada"},
+                  {label:"Creada",     value:selectedBooking.createdAt?new Date(selectedBooking.createdAt).toLocaleDateString("es-AR"):"—"},
+                ].map(({label,value})=>(
+                  <div key={label} style={{background:C.bg,borderRadius:8,padding:"8px 12px"}}>
+                    <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{label}</div>
+                    <div style={{fontSize:13,fontWeight:600}}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desglose financiero */}
+              <div style={{background:"linear-gradient(135deg,#d1fae5,#a7f3d0)",borderRadius:12,padding:"16px",marginBottom:16}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.green,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:12}}>💰 Desglose financiero</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[
+                    {label:"Precio/noche", value:fARS(selectedBooking.precioNocheUsado||Math.round((selectedBooking.totalARS||0)/(selectedBooking.nights||1))), usd:fUSD(arsToUsd(selectedBooking.precioNocheUsado||0,tc))},
+                    {label:"Total huésped ("+selectedBooking.nights+"n)", value:fARS(selectedBooking.totalARS||0), usd:fUSD(arsToUsd(selectedBooking.totalARS||0,tc))},
+                    {label:"Comisión "+((selectedBooking.commissionPct||0)+"%"), value:"−"+fARS(selectedBooking.comisionARS||0), usd:"−"+fUSD(arsToUsd(selectedBooking.comisionARS||0,tc)), red:true},
+                    {label:"Recibís vos (neto)", value:fARS(selectedBooking.totalNetoARS||0), usd:fUSD(selectedBooking.totalUSD||arsToUsd(selectedBooking.totalNetoARS||0,tc)), bold:true},
+                  ].map(({label,value,usd,red,bold})=>(
+                    <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(5,150,105,0.2)"}}>
+                      <span style={{fontSize:13,color:"#065f46"}}>{label}</span>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:bold?16:13,fontWeight:bold?800:600,color:red?C.red:C.green}}>{value}</div>
+                        <div style={{fontSize:11,color:red?"#dc2626":"#065f46"}}>{usd}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notas */}
+              {selectedBooking.notes&&(
+                <div style={{background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:16}}>
+                  <div style={{fontSize:11,color:C.textMuted,fontWeight:600,marginBottom:4}}>NOTAS</div>
+                  <div style={{fontSize:13}}>{selectedBooking.notes}</div>
+                </div>
+              )}
+
+              {/* Botones */}
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>{
+                  // Export to print
+                  const w = window.open("","_blank");
+                  w.document.write(`
+                    <html><head><title>Reserva · ${selectedBooking.guestName}</title>
+                    <style>body{font-family:system-ui,sans-serif;padding:24px;max-width:500px;margin:0 auto}
+                    h2{color:#0f2156}table{width:100%;border-collapse:collapse}
+                    td{padding:8px 12px;border-bottom:1px solid #e8eaed}
+                    .green{color:#059669;font-weight:700}.red{color:#dc2626}
+                    .header{background:#0f2156;color:white;padding:16px;border-radius:8px;margin-bottom:16px}
+                    </style></head><body>
+                    <div class="header"><h2 style="margin:0;color:white">RentAr · Comprobante de reserva</h2>
+                    <p style="margin:4px 0 0;opacity:0.7">${new Date().toLocaleDateString("es-AR")}</p></div>
+                    <table>
+                      <tr><td><b>Huésped</b></td><td>${selectedBooking.guestName}</td></tr>
+                      <tr><td><b>Email</b></td><td>${selectedBooking.guestEmail||"—"}</td></tr>
+                      <tr><td><b>Teléfono</b></td><td>${selectedBooking.guestPhone||"—"}</td></tr>
+                      <tr><td><b>Check-in</b></td><td>${selectedBooking.checkIn}</td></tr>
+                      <tr><td><b>Check-out</b></td><td>${selectedBooking.checkOut}</td></tr>
+                      <tr><td><b>Noches</b></td><td>${selectedBooking.nights}</td></tr>
+                      <tr><td><b>Personas</b></td><td>${selectedBooking.personas||1}</td></tr>
+                      <tr><td><b>Plataforma</b></td><td>${selectedBooking.source||"Directa"}</td></tr>
+                      <tr><td><b>Total</b></td><td class="green">${fARS(selectedBooking.totalARS||0)} · ${fUSD(arsToUsd(selectedBooking.totalARS||0,tc))}</td></tr>
+                      ${selectedBooking.comisionARS>0?`<tr><td><b>Comisión</b></td><td class="red">−${fARS(selectedBooking.comisionARS)} (${selectedBooking.commissionPct}%)</td></tr>`:""}
+                      <tr><td><b>Recibís vos</b></td><td class="green">${fARS(selectedBooking.totalNetoARS||0)} · ${fUSD(selectedBooking.totalUSD||0)}</td></tr>
+                      ${selectedBooking.notes?`<tr><td><b>Notas</b></td><td>${selectedBooking.notes}</td></tr>`:""}
+                    </table>
+                    <p style="margin-top:24px;color:#6b7280;font-size:12px">Generado con RentAr · rent-ar-app.vercel.app</p>
+                    </body></html>
+                  `);
+                  w.document.close();
+                  w.print();
+                }} style={{...S.btn,flex:1,justifyContent:"center",gap:6}}>
+                  🖨 Exportar / Imprimir
+                </button>
+                <button onClick={async()=>{
+                  if(!confirm("¿Eliminar esta reserva?"))return;
+                  try{
+                    await deleteDoc(doc(db,"re_bookings",selectedBooking.id));
+                    await addDoc(collection(db,"re_movimientos"),{...selectedBooking,deletedAt:new Date().toISOString()});
+                    await reload();
+                    setSelectedBooking(null);
+                  }catch(e){alert("Error: "+e.message);}
+                }} style={{...S.btnSec,color:C.red,borderColor:C.red}}>Eliminar</button>
+                <button onClick={()=>setSelectedBooking(null)} style={S.btnSec}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showForm&&(
