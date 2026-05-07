@@ -55,10 +55,10 @@ function calcPricing(nights, base, cleaningCostPerNight=0, commPct=0, minNights=
   let rate=base, label="Estándar", available=true, warningMsg="";
 
   if (nights < minNights) {
-    available = false;
-    warningMsg = `Mínimo ${minNights} noches`;
+    available = true;  // no bloquear, solo advertir
+    warningMsg = `Por debajo del mínimo recomendado (${minNights} noches)`;
     rate = base * 1.5;
-    label = `⚠ Mínimo ${minNights} noches`;
+    label = `+50% (bajo mín. recomendado)`;
   } else if (nights === 1) {
     rate = base * 1.5;
     label = "+50% tarifa 1 noche";
@@ -1001,7 +1001,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
 
   // Política de precios según noches
   function pricingMultiplier(noches) {
-    if (noches < minNights) return { mult:1.5, tag:"⚠ Bajo mínimo", color:C.red,    available:false };
+    if (noches < minNights) return { mult:1.5, tag:"⚠ Bajo mín. recomendado", color:C.yellow, available:true };
     if (noches === 1)        return { mult:1.5, tag:"+50%",           color:C.red,    available:false };
     if (noches === 2)        return { mult:1.2, tag:"+20%",           color:C.yellow, available:true };
     if (noches >= 30)        return { mult:0.75,tag:"−25% mensual",   color:C.blue,   available:true };
@@ -2267,18 +2267,19 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                     <div style={{fontSize:32}}>📅</div>
                     <div style={{fontSize:13}}>Seleccioná las fechas para ver opciones de precio</div>
                   </div>
-                ):belowMin?(
-                  <div style={{background:C.redLight,borderRadius:12,padding:"20px",border:"1px solid "+C.red,textAlign:"center"}}>
-                    <div style={{fontSize:20,marginBottom:8}}>⚠</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.red}}>Mínimo {minNightsVal} noches</div>
-                    <div style={{fontSize:12,color:C.red,marginTop:4}}>Ajustá las fechas para continuar</div>
-                  </div>
                 ):(
                   <>
+                    {/* Aviso mínimo - solo advertencia, no bloquea */}
+                    {belowMin&&(
+                      <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.yellow+"66"}}>
+                        <div style={{fontSize:12,fontWeight:700,color:C.yellow}}>⚠ Bajo el mínimo recomendado ({minNightsVal}n)</div>
+                        <div style={{fontSize:11,color:C.yellow,marginTop:2}}>Podés continuar igual, pero el precio tiene recargo.</div>
+                      </div>
+                    )}
                     {/* Resumen noches + personas */}
                     <div style={{background:C.white,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:13,fontWeight:600}}>{nights}n · {form.personas} {form.personas===1?"persona":"personas"}</span>
-                      <span style={{fontSize:11,background:C.greenLight,color:C.green,padding:"3px 8px",borderRadius:20,fontWeight:600}}>✓ OK</span>
+                      <span style={{fontSize:11,background:belowMin?C.yellowLight:C.greenLight,color:belowMin?C.yellow:C.green,padding:"3px 8px",borderRadius:20,fontWeight:600}}>{belowMin?"⚠ Bajo mín.":"✓ OK"}</span>
                     </div>
 
                     {/* Opciones pre-simuladas */}
@@ -2365,16 +2366,16 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
 
                 {/* Botones */}
                 <div style={{marginTop:"auto",display:"flex",gap:10,paddingTop:12}}>
-                  <button onClick={save} disabled={saving||(nights>0&&!belowMin&&precioSelIdx<0&&!precioManual)} style={{
+                  <button onClick={save} disabled={saving||!(precioSelIdx>=0||precioManual)} style={{
                     flex:1,padding:"13px 0",border:"none",borderRadius:10,cursor:"pointer",
-                    background:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)
+                    background:(precioSelIdx>=0||precioManual)
                       ?"linear-gradient(135deg,#059669,#10b981)"
                       :C.border,
-                    color:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"#fff":C.textMuted,
+                    color:(precioSelIdx>=0||precioManual)?"#fff":C.textMuted,
                     fontSize:14,fontWeight:700,
-                    boxShadow:nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"0 4px 14px rgba(5,150,105,0.3)":"none",
+                    boxShadow:(precioSelIdx>=0||precioManual)?"0 4px 14px rgba(5,150,105,0.3)":"none",
                   }}>
-                    {saving?"Guardando...":nights>0&&!belowMin&&(precioSelIdx>=0||precioManual)?"✓ Guardar reserva":"Elegí un precio →"}
+                    {saving?"Guardando...":(precioSelIdx>=0||precioManual)?"✓ Guardar reserva":"Elegí un precio →"}
                   </button>
                   <button onClick={()=>{setShowForm(false);setPrecioSelIdx(-1);setPrecioManual("");}} style={{...S.btnSec,padding:"13px 16px"}}>Cancelar</button>
                 </div>
