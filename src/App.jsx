@@ -451,7 +451,7 @@ export default function App() {
         ))}
       </nav>
 
-            <main className="main-content" style={{ flex:1, marginLeft:0, padding:"102px 40px 40px", minHeight:"100vh" }}>
+            <main className="main-content" style={{ flex:1, marginLeft:0, padding:"116px 40px 40px", minHeight:"100vh" }}>
         {loading ? (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"60vh", flexDirection:"column", gap:16 }}>
             <div style={{ width:36, height:36, borderRadius:"50%", border:"3px solid "+C.border, borderTopColor:C.blue, animation:"spin 0.8s linear infinite" }}/>
@@ -510,7 +510,7 @@ export default function App() {
           .grid-4{grid-template-columns:1fr 1fr!important}
           .grid-3{grid-template-columns:1fr 1fr!important}
           .grid-6{grid-template-columns:repeat(2,1fr)!important}
-          .main-content{padding:68px 10px 88px!important}
+          .main-content{padding:100px 10px 88px!important}
         }
         .nav-label-top{display:inline}
         @media(max-width:1100px){
