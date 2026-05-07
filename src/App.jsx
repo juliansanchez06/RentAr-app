@@ -2124,6 +2124,9 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
             <div style={{fontSize:13,color:C.textSec,marginTop:2}}>
               {now2.toLocaleDateString("es-AR",{month:"long",year:"numeric"})} · {diasRestantes} días restantes
             </div>
+            <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>
+              Ganancia deseada: {fUSD(metaUSD)} + Gastos fijos: {fUSD(Math.round(gastosUSD2))} = Total necesario: {fUSD(Math.round(metaTotalUSD))}
+            </div>
           </div>
           <div style={{textAlign:"right"}}>
             <div style={{fontSize:28,fontWeight:900,color:semaforoColor}}>{pctMeta}%</div>
@@ -2228,10 +2231,14 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
               ):(
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {bookings.filter(b=>b.status==="confirmed").sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).map(b=>(
-                    <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border}}>
+                    <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border,cursor:"pointer",transition:"box-shadow 0.15s"}}
+                      onClick={()=>setSelectedBooking(b)}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:14,fontWeight:600}}>{b.guestName}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                            <div style={{fontSize:14,fontWeight:600,color:C.blue,textDecoration:"underline dotted"}}>{b.guestName}</div>
+                            <span style={{fontSize:10,background:C.blueLight,color:C.blue,padding:"2px 6px",borderRadius:20,fontWeight:600}}>Ver detalle →</span>
+                          </div>
                           <div style={{fontSize:12,color:C.textSec,marginTop:2}}>{b.checkIn} → {b.checkOut} · {b.nights} noches</div>
                           {b.source&&<div style={{fontSize:11,color:C.textMuted,marginTop:2,textTransform:"capitalize"}}>Fuente: {b.source}{b.commissionPct>0?` (${b.commissionPct}%)`:""}</div>}
                         </div>
