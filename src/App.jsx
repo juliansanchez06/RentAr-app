@@ -1917,72 +1917,56 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   // Opciones de precio pre-simuladas del Punto de Equilibrio
   const opcionesPrecios = useMemo(()=>{
     if (!nights || nights < 1) return [];
-    const opts = [];
-    const cleanCost = 5000 * nights; // costo limpieza interno
+    const cleanCost = 5000 * nights;
 
-    // Opción 1: precio calculado automático (base)
-    if (pricing && !belowMin) {
-      opts.push({
-        idx:0, label:"Precio sugerido", sublabel:"Basado en tu tarifa configurada",
-        precioNoche: pricing.perNight,
-        totalHuesped: pricing.total,
-        netoVos: pricing.netoReal,
-        color: C.blue, bg: C.blueLight, tag:"⭐ Recomendado",
-      });
+    function calcOpt(pn) {
+      const tot = pn * nights;
+      const com = Math.round(tot * commPct / 100);
+      const net = tot - com - cleanCost;
+      return {
+        totalHuesped: tot, comision: com, netoVos: net,
+        totalHuespedUSD: arsToUsd(tot, tc),
+        comisionUSD: arsToUsd(com, tc),
+        netoVosUSD: arsToUsd(net, tc),
+      };
     }
 
-    // Opción 2: precio mínimo para cubrir gastos + meta
     const gastosUSD = pinnedValues?.gastos
-      ? (() => { try { const g=JSON.parse(pinnedValues.gastos); return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0); } catch{return 56;} })()
+      ? (()=>{ try{ const g=JSON.parse(pinnedValues.gastos); return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0); }catch{return 56;} })()
       : 56;
     const metaUSD = pinnedValues?.targetGanancia || 200;
-    const totalNecARS = (gastosUSD + metaUSD) * tc;
-    const precioMinNoche = Math.ceil(totalNecARS / 20 / 1000) * 1000; // asume 20 noches/mes
-    if (precioMinNoche > 0 && precioMinNoche !== pricing?.perNight) {
-      const totalMin = precioMinNoche * nights;
-      const comMin = Math.round(totalMin * commPct / 100);
-      const netoMin = totalMin - comMin - cleanCost;
-      opts.push({
-        idx:1, label:"Precio mínimo rentable", sublabel:`Para cubrir gastos + meta USD ${metaUSD}/mes`,
-        precioNoche: precioMinNoche,
-        totalHuesped: totalMin,
-        netoVos: netoMin,
-        color: C.green, bg: C.greenLight, tag:"💚 Punto equilibrio",
-      });
-    }
+    const opts = [];
 
-    // Opción 3: precio con descuento para llenar más noches
-    const precioDesc = Math.round((pricing?.perNight || tarifaPersonas) * 0.85);
-    if (precioDesc !== pricing?.perNight) {
-      const totalDesc = precioDesc * nights;
-      const comDesc = Math.round(totalDesc * commPct / 100);
-      const netoDesc = totalDesc - comDesc - cleanCost;
-      opts.push({
-        idx:2, label:"Precio con descuento −15%", sublabel:"Para aumentar ocupación",
-        precioNoche: precioDesc,
-        totalHuesped: totalDesc,
-        netoVos: netoDesc,
-        color: C.yellow, bg: C.yellowLight, tag:"🎯 Mayor ocupación",
-      });
-    }
+    if (pricing) opts.push({
+      idx:0, label:"Precio sugerido", sublabel:"Basado en tu tarifa configurada",
+      precioNoche:pricing.perNight, ...calcOpt(pricing.perNight),
+      color:C.blue, bg:C.blueLight, tag:"⭐ Recomendado",
+    });
 
-    // Opción 4: precio premium +20%
-    const precioPrem = Math.round((pricing?.perNight || tarifaPersonas) * 1.2);
-    if (precioPrem !== pricing?.perNight) {
-      const totalPrem = precioPrem * nights;
-      const comPrem = Math.round(totalPrem * commPct / 100);
-      const netoPrem = totalPrem - comPrem - cleanCost;
-      opts.push({
-        idx:3, label:"Precio premium +20%", sublabel:"Temporada alta o fechas especiales",
-        precioNoche: precioPrem,
-        totalHuesped: totalPrem,
-        netoVos: netoPrem,
-        color: "#7c3aed", bg: "#ede9fe", tag:"🔥 Premium",
-      });
-    }
+    const precioMin = Math.ceil((gastosUSD+metaUSD)*tc/20/1000)*1000;
+    if (precioMin>0 && precioMin!==pricing?.perNight) opts.push({
+      idx:1, label:"Precio mínimo rentable",
+      sublabel:`Cubre gastos + meta ${fUSD(metaUSD)}/mes`,
+      precioNoche:precioMin, ...calcOpt(precioMin),
+      color:C.green, bg:C.greenLight, tag:"💚 Punto equilibrio",
+    });
+
+    const precioDesc = Math.round((pricing?.perNight||tarifaPersonas)*0.85);
+    if (precioDesc!==pricing?.perNight) opts.push({
+      idx:2, label:"Precio con descuento −15%", sublabel:"Para aumentar ocupación",
+      precioNoche:precioDesc, ...calcOpt(precioDesc),
+      color:C.yellow, bg:C.yellowLight, tag:"🎯 Mayor ocupación",
+    });
+
+    const precioPrem = Math.round((pricing?.perNight||tarifaPersonas)*1.2);
+    if (precioPrem!==pricing?.perNight) opts.push({
+      idx:3, label:"Precio premium +20%", sublabel:"Temporada alta o fechas especiales",
+      precioNoche:precioPrem, ...calcOpt(precioPrem),
+      color:"#7c3aed", bg:"#ede9fe", tag:"🔥 Premium",
+    });
 
     return opts;
-  }, [nights, tarifaPersonas, commPct, tc, pinnedValues, belowMin]);
+  },[nights,tarifaPersonas,commPct,tc,pinnedValues,pricing]);
 
   // Precio final efectivo (manual > seleccionado > calculado)
   const precioFinalNoche = precioManual
@@ -2293,25 +2277,42 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                             background:precioSelIdx===opt.idx?opt.bg:C.white,
                             transition:"all 0.15s",
                           }}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                          {/* Header */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                             <div>
                               <div style={{fontSize:13,fontWeight:700,color:precioSelIdx===opt.idx?opt.color:C.text}}>{opt.label}</div>
                               <div style={{fontSize:11,color:C.textMuted}}>{opt.sublabel}</div>
                             </div>
                             <span style={{fontSize:10,background:opt.bg,color:opt.color,padding:"2px 8px",borderRadius:20,fontWeight:700,flexShrink:0,marginLeft:8}}>{opt.tag}</span>
                           </div>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <div>
-                              <span style={{fontSize:16,fontWeight:800,color:opt.color}}>{fARS(opt.precioNoche)}</span>
-                              <span style={{fontSize:11,color:C.textMuted}}>/noche</span>
+
+                          {/* Precio por noche */}
+                          <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:6}}>
+                            <span style={{fontSize:18,fontWeight:900,color:opt.color}}>{fARS(opt.precioNoche)}</span>
+                            <span style={{fontSize:11,color:C.textMuted}}>/noche ·</span>
+                            <span style={{fontSize:12,fontWeight:700,color:opt.color}}>{fUSD(arsToUsd(opt.precioNoche,tc))}</span>
+                          </div>
+
+                          {/* Totales */}
+                          <div style={{background:"rgba(0,0,0,0.04)",borderRadius:8,padding:"8px 10px",display:"flex",flexDirection:"column",gap:4}}>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                              <span style={{color:C.textSec}}>Huésped paga</span>
+                              <span style={{fontWeight:700}}>{fARS(opt.totalHuesped)} · <span style={{color:C.blue}}>{fUSD(opt.totalHuespedUSD)}</span></span>
                             </div>
-                            <div style={{textAlign:"right"}}>
-                              <div style={{fontSize:13,fontWeight:700}}>Total: {fARS(opt.totalHuesped)}</div>
-                              <div style={{fontSize:11,color:C.green}}>Recibís: {fARS(opt.netoVos)} · {fUSD(arsToUsd(opt.netoVos,tc))}</div>
+                            {commPct>0&&(
+                              <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                                <span style={{color:C.red}}>Comisión {form.source} {commPct}%</span>
+                                <span style={{color:C.red,fontWeight:600}}>−{fARS(opt.comision)} · −{fUSD(opt.comisionUSD)}</span>
+                              </div>
+                            )}
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,borderTop:"1px solid rgba(0,0,0,0.08)",paddingTop:4,marginTop:2}}>
+                              <span style={{color:C.green,fontWeight:600}}>Recibís vos</span>
+                              <span style={{fontWeight:800,color:C.green}}>{fARS(opt.netoVos)} · {fUSD(opt.netoVosUSD)}</span>
                             </div>
                           </div>
+
                           {precioSelIdx===opt.idx&&(
-                            <div style={{marginTop:6,fontSize:11,color:opt.color,fontWeight:600}}>✓ Precio seleccionado</div>
+                            <div style={{marginTop:6,fontSize:11,color:opt.color,fontWeight:700}}>✓ Precio seleccionado</div>
                           )}
                         </div>
                       ))}
