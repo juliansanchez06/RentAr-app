@@ -2350,9 +2350,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   .page{max-width:680px;margin:0 auto;background:#fff;min-height:100vh}
 
   /* Header */
-  .header{background:linear-gradient(135deg,#0f2156 0%,#1e3a6e 60%,#1565c0 100%);padding:32px 40px;position:relative;overflow:hidden}
-  .header::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:rgba(255,255,255,0.05);border-radius:50%}
-  .header::after{content:'';position:absolute;bottom:-40px;left:40px;width:140px;height:140px;background:rgba(255,255,255,0.03);border-radius:50%}
+  .header{background:linear-gradient(135deg,#0f2156 0%,#1e3a6e 60%,#1565c0 100%);padding:32px 40px}
   .header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
   .logo-box{background:#fff;border-radius:12px;padding:8px 16px;display:inline-flex;align-items:center;gap:8px}
   .logo-img{height:36px;width:auto}
@@ -2428,7 +2426,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   <div class="header">
     <div class="header-top">
       <div class="logo-box">
-        <img src="${LOGO}" class="logo-img" alt="RentAr"/>
+        <img src="${LOGO}" class="logo-img" alt="RentAr" style="height:36px;width:auto;display:block"/>
       </div>
       <span class="badge">Comprobante de reserva</span>
     </div>
