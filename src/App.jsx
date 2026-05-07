@@ -2325,36 +2325,196 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
               <div style={{display:"flex",gap:10}}>
                 <button onClick={()=>{
                   // Export to print
+                  const b2 = selectedBooking;
                   const w = window.open("","_blank");
-                  w.document.write(`
-                    <html><head><title>Reserva · ${selectedBooking.guestName}</title>
-                    <style>body{font-family:system-ui,sans-serif;padding:24px;max-width:500px;margin:0 auto}
-                    h2{color:#0f2156}table{width:100%;border-collapse:collapse}
-                    td{padding:8px 12px;border-bottom:1px solid #e8eaed}
-                    .green{color:#059669;font-weight:700}.red{color:#dc2626}
-                    .header{background:#0f2156;color:white;padding:16px;border-radius:8px;margin-bottom:16px}
-                    </style></head><body>
-                    <div class="header"><h2 style="margin:0;color:white">RentAr · Comprobante de reserva</h2>
-                    <p style="margin:4px 0 0;opacity:0.7">${new Date().toLocaleDateString("es-AR")}</p></div>
-                    <table>
-                      <tr><td><b>Huésped</b></td><td>${selectedBooking.guestName}</td></tr>
-                      <tr><td><b>Email</b></td><td>${selectedBooking.guestEmail||"—"}</td></tr>
-                      <tr><td><b>Teléfono</b></td><td>${selectedBooking.guestPhone||"—"}</td></tr>
-                      <tr><td><b>Check-in</b></td><td>${selectedBooking.checkIn}</td></tr>
-                      <tr><td><b>Check-out</b></td><td>${selectedBooking.checkOut}</td></tr>
-                      <tr><td><b>Noches</b></td><td>${selectedBooking.nights}</td></tr>
-                      <tr><td><b>Personas</b></td><td>${selectedBooking.personas||1}</td></tr>
-                      <tr><td><b>Plataforma</b></td><td>${selectedBooking.source||"Directa"}</td></tr>
-                      <tr><td><b>Total</b></td><td class="green">${fARS(selectedBooking.totalARS||0)} · ${fUSD(arsToUsd(selectedBooking.totalARS||0,tc))}</td></tr>
-                      ${selectedBooking.comisionARS>0?`<tr><td><b>Comisión</b></td><td class="red">−${fARS(selectedBooking.comisionARS)} (${selectedBooking.commissionPct}%)</td></tr>`:""}
-                      <tr><td><b>Recibís vos</b></td><td class="green">${fARS(selectedBooking.totalNetoARS||0)} · ${fUSD(selectedBooking.totalUSD||0)}</td></tr>
-                      ${selectedBooking.notes?`<tr><td><b>Notas</b></td><td>${selectedBooking.notes}</td></tr>`:""}
-                    </table>
-                    <p style="margin-top:24px;color:#6b7280;font-size:12px">Generado con RentAr · rent-ar-app.vercel.app</p>
-                    </body></html>
-                  `);
+                  const totalARS = b2.totalARS||0;
+                  const totalUSD = b2.totalUSD||arsToUsd(b2.totalNetoARS||0,tc);
+                  const netoARS  = b2.totalNetoARS||0;
+                  const comARS   = b2.comisionARS||0;
+                  const pNoche   = b2.precioNocheUsado||Math.round(totalARS/(b2.nights||1));
+                  const noches   = b2.nights||1;
+                  const personas = b2.personas||1;
+                  const source   = (b2.source||"Directa").charAt(0).toUpperCase()+(b2.source||"directa").slice(1);
+                  const commPct2 = b2.commissionPct||0;
+                  const fechaDoc = new Date().toLocaleDateString("es-AR",{day:"2-digit",month:"long",year:"numeric"});
+                  const numRes   = b2.id?.slice(-6).toUpperCase()||"000001";
+
+                  w.document.write(`<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="UTF-8"/>
+<title>Reserva #${numRes} · ${b2.guestName}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+  body{font-family:'Inter',system-ui,sans-serif;background:#f7f8fa;color:#1a1a2e;padding:0}
+  .page{max-width:680px;margin:0 auto;background:#fff;min-height:100vh}
+
+  /* Header */
+  .header{background:linear-gradient(135deg,#0f2156 0%,#1e3a6e 60%,#1565c0 100%);padding:32px 40px;position:relative;overflow:hidden}
+  .header::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:rgba(255,255,255,0.05);border-radius:50%}
+  .header::after{content:'';position:absolute;bottom:-40px;left:40px;width:140px;height:140px;background:rgba(255,255,255,0.03);border-radius:50%}
+  .header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+  .logo-box{background:#fff;border-radius:12px;padding:8px 16px;display:inline-flex;align-items:center;gap:8px}
+  .logo-img{height:36px;width:auto}
+  .logo-txt{font-size:11px;font-weight:700;color:#0f2156;letter-spacing:1.5px;text-transform:uppercase}
+  .badge{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:600}
+  .header-title{color:#fff}
+  .header-title h1{font-size:28px;font-weight:900;letter-spacing:-0.5px;margin-bottom:4px}
+  .header-title p{font-size:14px;opacity:0.7;margin-bottom:0}
+  .num-res{color:rgba(255,255,255,0.5);font-size:12px;margin-top:4px}
+
+  /* Guest card */
+  .guest-card{background:linear-gradient(135deg,#e0f2fe,#dbeafe);border-radius:0;padding:24px 40px;display:flex;align-items:center;gap:20px;border-bottom:1px solid #bfdbfe}
+  .avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#0f2156,#2563eb);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:900;flex-shrink:0}
+  .guest-info h2{font-size:22px;font-weight:800;color:#0f2156;margin-bottom:2px}
+  .guest-info p{font-size:13px;color:#3b82f6;margin:1px 0}
+
+  /* Body */
+  .body{padding:32px 40px}
+
+  /* Dates bar */
+  .dates-bar{background:#0f2156;border-radius:14px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+  .date-block{text-align:center;color:#fff}
+  .date-block .label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;opacity:0.6;margin-bottom:4px}
+  .date-block .date{font-size:18px;font-weight:800}
+  .date-block .sub{font-size:11px;opacity:0.6;margin-top:2px}
+  .dates-divider{display:flex;flex-direction:column;align-items:center;color:rgba(255,255,255,0.4)}
+  .dates-divider .nights{background:rgba(255,255,255,0.15);border-radius:20px;padding:4px 16px;font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
+  .arrow{font-size:20px;opacity:0.4}
+
+  /* Info grid */
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+  .info-item{background:#f7f8fa;border-radius:10px;padding:12px 16px;border:1px solid #e8eaed}
+  .info-item .label{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px}
+  .info-item .value{font-size:14px;font-weight:600;color:#1a1a2e}
+
+  /* Finance table */
+  .finance{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:14px;padding:24px;margin-bottom:24px;border:1px solid #bbf7d0}
+  .finance h3{font-size:13px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .finance-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(5,150,105,0.15)}
+  .finance-row:last-child{border-bottom:none;padding-top:14px;margin-top:4px}
+  .finance-row .flabel{font-size:13px;color:#065f46}
+  .finance-row .fval{text-align:right}
+  .finance-row .fval .ars{font-size:15px;font-weight:700;color:#059669}
+  .finance-row .fval .usd{font-size:11px;color:#047857;margin-top:1px}
+  .finance-row.red .flabel{color:#dc2626}
+  .finance-row.red .fval .ars{color:#dc2626}
+  .finance-row.red .fval .usd{color:#dc2626}
+  .finance-row.total .flabel{font-size:14px;font-weight:800;color:#0f2156}
+  .finance-row.total .fval .ars{font-size:20px;color:#0f2156}
+
+  /* Notes */
+  .notes{background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:14px 18px;margin-bottom:24px}
+  .notes .nlabel{font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px}
+  .notes p{font-size:13px;color:#92400e}
+
+  /* Footer */
+  .footer{background:#f7f8fa;border-top:1px solid #e8eaed;padding:20px 40px;display:flex;justify-content:space-between;align-items:center}
+  .footer p{font-size:11px;color:#9ca3af}
+  .footer .brand{font-size:12px;font-weight:700;color:#0f2156}
+
+  /* Print */
+  @media print{
+    body{background:#fff}
+    .page{max-width:100%;box-shadow:none}
+    .no-print{display:none!important}
+    @page{margin:0}
+  }
+</style>
+</head><body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="logo-box">
+        <img src="${LOGO}" class="logo-img" alt="RentAr"/>
+      </div>
+      <span class="badge">Comprobante de reserva</span>
+    </div>
+    <div class="header-title">
+      <h1>Reserva confirmada</h1>
+      <p>${b2.checkIn} al ${b2.checkOut} · ${noches} ${noches===1?"noche":"noches"}</p>
+      <p class="num-res">Nº ${numRes} · Emitido el ${fechaDoc}</p>
+    </div>
+  </div>
+
+  <!-- Guest -->
+  <div class="guest-card">
+    <div class="avatar">${(b2.guestName||"?")[0].toUpperCase()}</div>
+    <div class="guest-info">
+      <h2>${b2.guestName}</h2>
+      ${b2.guestEmail?`<p>✉ ${b2.guestEmail}</p>`:""}
+      ${b2.guestPhone?`<p>📞 ${b2.guestPhone}</p>`:""}
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- Dates -->
+    <div class="dates-bar">
+      <div class="date-block">
+        <div class="label">Check-in</div>
+        <div class="date">${b2.checkIn}</div>
+        <div class="sub">Desde las 14:00 hs</div>
+      </div>
+      <div class="dates-divider">
+        <div class="nights">${noches} ${noches===1?"noche":"noches"}</div>
+        <div class="arrow">→</div>
+      </div>
+      <div class="date-block">
+        <div class="label">Check-out</div>
+        <div class="date">${b2.checkOut}</div>
+        <div class="sub">Hasta las 11:00 hs</div>
+      </div>
+    </div>
+
+    <!-- Info grid -->
+    <div class="info-grid">
+      <div class="info-item"><div class="label">Plataforma</div><div class="value">${source}${commPct2>0?" ("+commPct2+"%)+":""}</div></div>
+      <div class="info-item"><div class="label">Personas</div><div class="value">${personas} ${personas===1?"persona":"personas"}</div></div>
+      <div class="info-item"><div class="label">Estado</div><div class="value">✓ Confirmada</div></div>
+      <div class="info-item"><div class="label">Precio por noche</div><div class="value">$${pNoche.toLocaleString("es-AR")}</div></div>
+    </div>
+
+    <!-- Finance -->
+    <div class="finance">
+      <h3>💰 Desglose financiero</h3>
+      <div class="finance-row">
+        <span class="flabel">Total huésped (${noches}n × $${pNoche.toLocaleString("es-AR")})</span>
+        <div class="fval"><div class="ars">$${totalARS.toLocaleString("es-AR")}</div><div class="usd">USD ${Math.round(totalARS/tc)}</div></div>
+      </div>
+      ${commPct2>0?`<div class="finance-row red">
+        <span class="flabel">Comisión ${source} (${commPct2}%)</span>
+        <div class="fval"><div class="ars">−$${comARS.toLocaleString("es-AR")}</div><div class="usd">−USD ${Math.round(comARS/tc)}</div></div>
+      </div>`:""}
+      <div class="finance-row total">
+        <span class="flabel">Recibís vos (neto)</span>
+        <div class="fval"><div class="ars">$${netoARS.toLocaleString("es-AR")}</div><div class="usd">USD ${Math.round(netoARS/tc)}</div></div>
+      </div>
+    </div>
+
+    ${b2.notes?`<div class="notes"><div class="nlabel">📝 Notas</div><p>${b2.notes}</p></div>`:""}
+
+    <!-- Print button -->
+    <div class="no-print" style="text-align:center;margin-bottom:24px">
+      <button onclick="window.print()" style="background:linear-gradient(135deg,#0f2156,#2563eb);color:#fff;border:none;border-radius:10px;padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+        🖨 Imprimir / Guardar PDF
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>TC MEP: $${tc.toLocaleString("es-AR")} al momento de la reserva</p>
+    <span class="brand">RentAr · Gestión Inmobiliaria</span>
+  </div>
+
+</div>
+</body></html>`);
                   w.document.close();
-                  w.print();
+                  setTimeout(()=>w.print(),800);
                 }} style={{...S.btn,flex:1,justifyContent:"center",gap:6}}>
                   🖨 Exportar / Imprimir
                 </button>
