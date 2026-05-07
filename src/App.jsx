@@ -2261,8 +2261,8 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
 
       {/* ── MODAL DETALLE RESERVA ────────────────────────────────────────── */}
       {selectedBooking&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(6px)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"12px"}}>
-          <div style={{background:C.white,borderRadius:20,width:"100%",maxWidth:560,boxShadow:"0 24px 60px rgba(0,0,0,0.25)",overflow:"hidden"}}>
+        <div onClick={()=>setSelectedBooking(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(6px)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"12px",overflowY:"auto"}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.white,borderRadius:20,width:"100%",maxWidth:560,boxShadow:"0 24px 60px rgba(0,0,0,0.25)",overflow:"hidden",marginTop:20,marginBottom:20}}>
             {/* Header */}
             <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -2271,7 +2271,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                   {selectedBooking.checkIn} → {selectedBooking.checkOut} · {selectedBooking.nights} noches
                 </div>
               </div>
-              <button onClick={()=>setSelectedBooking(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+              <button onClick={e=>{e.stopPropagation();setSelectedBooking(null);}} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
             </div>
 
             <div style={{padding:"20px 24px"}}>
