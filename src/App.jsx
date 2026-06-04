@@ -541,7 +541,21 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
   const txInc1 = transactions.filter(t=>t.propertyId===d1?.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3;
   const inc1ARS = d1 ? (d1.monthlyIncomeARS||txInc1||476670) : 476670;
-  const inc1USD = arsToUsd(inc1ARS,tc), net1USD=inc1USD, val1=d1?.estimatedValueUSD||67000;
+
+  // Cobros de renta fija de este año (definido antes para dolarizar el ingreso)
+  const cobrosAnioRaw = transactions.filter(t=>
+    t.propertyId===d1?.id && t.type==="income" &&
+    t.date?.startsWith(String(now.getFullYear()))
+  );
+  // Último cobro real (el más reciente por fecha), dolarizado al TC con que se cobró
+  const ultimoCobro = [...cobrosAnioRaw].sort((a,b)=>(b.date||"").localeCompare(a.date||""))[0];
+  const ultimoCobroUSD = ultimoCobro
+    ? (ultimoCobro.amountUSD || arsToUsd(ultimoCobro.amountARS||0, ultimoCobro.exchangeRateUsed||tc))
+    : 0;
+
+  // Ingreso mensual dolarizado: usa el último alquiler cobrado en USD; si no hay cobros, cae al valor configurado
+  const inc1USD = ultimoCobroUSD>0 ? ultimoCobroUSD : arsToUsd(inc1ARS,tc);
+  const net1USD = inc1USD, val1=d1?.estimatedValueUSD||67000;
   const cap1    = val1>0?(net1USD*12/val1)*100:0, pb1=net1USD>0?val1/(net1USD*12):null;
 
   const inc2ARS=70000*nights, inc2USD=arsToUsd(inc2ARS,tc);
@@ -562,10 +576,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const recentTxs=transactions.slice(0,6);
 
   // Cobros de renta fija este año
-  const cobrosAnio = transactions.filter(t=>
-    t.propertyId===d1?.id && t.type==="income" &&
-    t.date?.startsWith(String(now.getFullYear()))
-  );
+  const cobrosAnio = cobrosAnioRaw;
   const mesesCobrados = cobrosAnio.map(t=>Number(t.date?.split("-")[1])-1);
   const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -782,9 +793,16 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
             </div>
           </div>
 
-          <div style={{display:"flex",justifyContent:"space-between",background:C.greenLight,borderRadius:10,padding:"10px 14px"}}>
-            <span style={{fontSize:13,color:C.green,fontWeight:500}}>Payback</span>
-            <span style={{fontSize:14,fontWeight:800,color:C.green}}>{pb1?pb1.toFixed(1)+" años":"N/A"}</span>
+          <div style={{background:C.greenLight,borderRadius:10,padding:"10px 14px"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,color:C.green,fontWeight:500}}>Payback (en USD)</span>
+              <span style={{fontSize:14,fontWeight:800,color:C.green}}>{pb1?pb1.toFixed(1)+" años":"N/A"}</span>
+            </div>
+            <div style={{fontSize:10,color:C.green,opacity:0.75,marginTop:4}}>
+              {ultimoCobroUSD>0
+                ? `Según último alquiler cobrado: ${fUSD(inc1USD)}/mes`
+                : `Según valor configurado: ${fUSD(inc1USD)}/mes`}
+            </div>
           </div>
         </div>
 
