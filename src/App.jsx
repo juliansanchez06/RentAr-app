@@ -565,6 +565,12 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const mesesCobrados = cobrosAnio.map(t=>Number(t.date?.split("-")[1])-1);
   const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
+  // Acumulado de renta fija: recaudado real (suma de cobros del año) + proyección anual completa
+  const recaudadoARS   = cobrosAnio.reduce((s,t)=>s+(t.amountARS||0),0);
+  const recaudadoUSDfix = cobrosAnio.reduce((s,t)=>s+(t.amountUSD||arsToUsd(t.amountARS||0,tc)),0);
+  const proyAnualARS   = inc1ARS*12;
+  const proyAnualUSD   = inc1USD*12;
+
   async function registrarCobro() {
     if (!d1?.id) { alert("Primero cargá el Depto 1 en Propiedades"); return; }
     if (!cobroMonto) { alert("Ingresá el monto"); return; }
@@ -616,9 +622,9 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
           </p>
         </div>
         <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Portfolio total</div>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fUSD(totalVal)}</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{properties.length} propiedad{properties.length!==1?"es":""} activa{properties.length!==1?"s":""}</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Recaudado {now.getFullYear()}</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fARS(recaudadoARS)}</div>
+          <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)} · {mesesCobrados.length} meses</div>
         </div>
       </div>
 
@@ -703,6 +709,30 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                 <div style={{width:8,height:8,borderRadius:2,background:C.yellowLight,border:"1px solid "+C.yellow}}/>
                 <span style={{fontSize:10,color:C.textMuted}}>Mes actual</span>
               </div>
+            </div>
+          </div>
+
+          {/* Recaudado del año + proyección anual */}
+          <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+              <div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Recaudado {now.getFullYear()}</div>
+                <div style={{fontSize:18,fontWeight:800,color:"#fff",lineHeight:1.1}}>{fARS(recaudadoARS)}</div>
+                <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>{mesesCobrados.length} de 12 meses cobrados</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Proyección anual</div>
+                <div style={{fontSize:18,fontWeight:800,color:"#fff",lineHeight:1.1}}>{fARS(proyAnualARS)}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:600,marginTop:2}}>{fUSD(proyAnualUSD)}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>12 meses × {fARS(inc1ARS)}</div>
+              </div>
+            </div>
+            <div style={{marginTop:10,height:6,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${Math.min(100,Math.round(recaudadoARS/(proyAnualARS||1)*100))}%`,background:"linear-gradient(90deg,#10b981,#6ee7b7)",borderRadius:3,transition:"width 0.4s ease"}}/>
+            </div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:5,textAlign:"right"}}>
+              {Math.min(100,Math.round(recaudadoARS/(proyAnualARS||1)*100))}% de la proyección anual
             </div>
           </div>
 
