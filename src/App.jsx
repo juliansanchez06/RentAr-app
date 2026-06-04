@@ -530,6 +530,10 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const [cobroAnio,setCobroAnio] = useState(new Date().getFullYear());
   const [cobroMonto,setCobroMonto] = useState("");
   const [savingCobro,setSavingCobro] = useState(false);
+  const [showGestion,setShowGestion] = useState(false);
+  const [editId,setEditId] = useState(null);
+  const [editMonto,setEditMonto] = useState("");
+  const [savingEdit,setSavingEdit] = useState(false);
   const now = new Date();
 
   const d1 = properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
@@ -565,11 +569,15 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const mesesCobrados = cobrosAnio.map(t=>Number(t.date?.split("-")[1])-1);
   const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
-  // Acumulado de renta fija: recaudado real (suma de cobros del año) + proyección anual completa
+  // Acumulado de renta fija: recaudado real (suma de cobros del año) + proyección anual realista
   const recaudadoARS   = cobrosAnio.reduce((s,t)=>s+(t.amountARS||0),0);
   const recaudadoUSDfix = cobrosAnio.reduce((s,t)=>s+(t.amountUSD||arsToUsd(t.amountARS||0,tc)),0);
-  const proyAnualARS   = inc1ARS*12;
-  const proyAnualUSD   = inc1USD*12;
+  // Meses únicos ya cobrados (sin contar duplicados) y meses que faltan en el año
+  const mesesUnicosCobrados = [...new Set(mesesCobrados)];
+  const mesesRestantes = 12 - mesesUnicosCobrados.length;
+  // Proyección = lo ya recaudado + los meses que faltan estimados al valor actual del alquiler
+  const proyAnualARS   = recaudadoARS + mesesRestantes*inc1ARS;
+  const proyAnualUSD   = recaudadoUSDfix + mesesRestantes*inc1USD;
 
   async function registrarCobro() {
     if (!d1?.id) { alert("Primero cargá el Depto 1 en Propiedades"); return; }
@@ -595,6 +603,38 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
     } catch(e) { alert("Error: "+e.message); }
     finally { setSavingCobro(false); }
   }
+
+  async function borrarCobro(id){
+    if (!window.confirm("¿Seguro que querés borrar este cobro? No se puede deshacer.")) return;
+    try {
+      await deleteDoc(doc(db,"re_transactions",id));
+      await reload();
+    } catch(e){ alert("Error al borrar: "+e.message); }
+  }
+
+  async function guardarEdicion(id){
+    const ars = Number(editMonto);
+    if (!ars||ars<=0){ alert("Ingresá un monto válido"); return; }
+    setSavingEdit(true);
+    try {
+      await updateDoc(doc(db,"re_transactions",id),{
+        amountARS: ars,
+        amountUSD: arsToUsd(ars,tc),
+        exchangeRateUsed: tc,
+      });
+      await reload();
+      setEditId(null);
+      setEditMonto("");
+    } catch(e){ alert("Error al editar: "+e.message); }
+    finally { setSavingEdit(false); }
+  }
+
+  // Detección de meses con más de un cobro (duplicados)
+  const conteoPorMes = cobrosAnio.reduce((acc,t)=>{
+    const m = Number(t.date?.split("-")[1])-1;
+    acc[m]=(acc[m]||0)+1; return acc;
+  },{});
+  const hayDuplicados = Object.values(conteoPorMes).some(n=>n>1);
 
   const last6=Array.from({length:6},(_,i)=>{
     const d=new Date(now.getFullYear(),now.getMonth()-(5-i),1);
@@ -624,7 +664,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Recaudado {now.getFullYear()}</div>
           <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fARS(recaudadoARS)}</div>
-          <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)} · {mesesCobrados.length} meses</div>
+          <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)} · {mesesUnicosCobrados.length} meses</div>
         </div>
       </div>
 
@@ -662,6 +702,12 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                 boxShadow:"0 2px 8px rgba(5,150,105,0.3)",
                 whiteSpace:"nowrap",
               }}>💰 Registrar cobro</button>
+              <button onClick={()=>setShowGestion(true)} title="Ver, editar o borrar cobros" style={{
+                background:"#fff",
+                color:C.textSec,border:"1px solid "+C.border,borderRadius:8,
+                padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",
+                whiteSpace:"nowrap",position:"relative",
+              }}>⚙ Cobros{hayDuplicados&&<span style={{position:"absolute",top:-5,right:-5,width:10,height:10,borderRadius:"50%",background:C.red}}/>}</button>
             </div>
           </div>
 
@@ -703,7 +749,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
             <div style={{display:"flex",gap:10,marginTop:8}}>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <div style={{width:8,height:8,borderRadius:2,background:C.green}}/>
-                <span style={{fontSize:10,color:C.textMuted}}>Cobrado ({mesesCobrados.length})</span>
+                <span style={{fontSize:10,color:C.textMuted}}>Cobrado ({mesesUnicosCobrados.length})</span>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <div style={{width:8,height:8,borderRadius:2,background:C.yellowLight,border:"1px solid "+C.yellow}}/>
@@ -719,13 +765,13 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                 <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Recaudado {now.getFullYear()}</div>
                 <div style={{fontSize:18,fontWeight:800,color:"#fff",lineHeight:1.1}}>{fARS(recaudadoARS)}</div>
                 <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)}</div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>{mesesCobrados.length} de 12 meses cobrados</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>{mesesUnicosCobrados.length} de 12 meses cobrados</div>
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Proyección anual</div>
                 <div style={{fontSize:18,fontWeight:800,color:"#fff",lineHeight:1.1}}>{fARS(proyAnualARS)}</div>
                 <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",fontWeight:600,marginTop:2}}>{fUSD(proyAnualUSD)}</div>
-                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>12 meses × {fARS(inc1ARS)}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",marginTop:3}}>recaudado + {mesesRestantes} meses × {fARS(inc1ARS)}</div>
               </div>
             </div>
             <div style={{marginTop:10,height:6,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
@@ -959,6 +1005,86 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                 <button onClick={()=>setShowCobro(false)} style={S.btnSec}>Cancelar</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal gestión de cobros: ver, editar, borrar */}
+      {showGestion&&(
+        <div style={S.modal}>
+          <div className="modal-box" style={{...S.modalBox,maxWidth:560}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+              <div style={{fontSize:18,fontWeight:700}}>⚙ Cobros registrados · {now.getFullYear()}</div>
+              <button onClick={()=>{setShowGestion(false);setEditId(null);}} style={{background:"none",border:"none",color:C.textSec,fontSize:22,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{fontSize:12,color:C.textSec,marginBottom:16}}>
+              Total: <strong style={{color:C.text}}>{fARS(recaudadoARS)}</strong> ({fUSD(recaudadoUSDfix)}) · {cobrosAnio.length} cobro{cobrosAnio.length!==1?"s":""}
+            </div>
+
+            {hayDuplicados&&(
+              <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 14px",fontSize:13,color:C.yellow,fontWeight:500,marginBottom:14}}>
+                ⚠ Hay meses con más de un cobro registrado. Borrá los repetidos para corregir el total.
+              </div>
+            )}
+
+            <div style={{display:"flex",flexDirection:"column",gap:8,maxHeight:380,overflowY:"auto"}}>
+              {cobrosAnio.length===0&&(
+                <div style={{textAlign:"center",color:C.textMuted,fontSize:13,padding:"20px 0"}}>No hay cobros registrados este año.</div>
+              )}
+              {[...cobrosAnio]
+                .sort((a,b)=>(a.date||"").localeCompare(b.date||""))
+                .map(t=>{
+                  const mesIdx = Number(t.date?.split("-")[1])-1;
+                  const duplicado = conteoPorMes[mesIdx]>1;
+                  const editando = editId===t.id;
+                  return (
+                    <div key={t.id} style={{
+                      display:"flex",justifyContent:"space-between",alignItems:"center",
+                      background:duplicado?C.yellowLight:C.bg,borderRadius:10,padding:"10px 14px",
+                      border:"1px solid "+(duplicado?C.yellow:C.border),gap:10,
+                    }}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600}}>
+                          {MESES[mesIdx]} {t.date?.split("-")[0]}
+                          {duplicado&&<span style={{fontSize:10,color:C.yellow,fontWeight:700,marginLeft:6}}>● repetido</span>}
+                        </div>
+                        {editando ? (
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                            <input type="number" autoFocus style={{...S.input,padding:"6px 10px",fontSize:13,width:140}}
+                              value={editMonto} onChange={e=>setEditMonto(e.target.value)} placeholder="Monto ARS"/>
+                            <span style={{fontSize:11,color:C.textSec}}>≈ {fUSD(arsToUsd(Number(editMonto||0),tc))}</span>
+                          </div>
+                        ) : (
+                          <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{fARS(t.amountARS)} · {fUSD(t.amountUSD||arsToUsd(t.amountARS,tc))}</div>
+                        )}
+                      </div>
+                      <div style={{display:"flex",gap:6,flexShrink:0}}>
+                        {editando ? (
+                          <>
+                            <button onClick={()=>guardarEdicion(t.id)} disabled={savingEdit} style={{
+                              background:C.green,color:"#fff",border:"none",borderRadius:7,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",
+                            }}>{savingEdit?"...":"Guardar"}</button>
+                            <button onClick={()=>{setEditId(null);setEditMonto("");}} style={{
+                              background:"#fff",color:C.textSec,border:"1px solid "+C.border,borderRadius:7,padding:"6px 12px",fontSize:12,cursor:"pointer",
+                            }}>Cancelar</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={()=>{setEditId(t.id);setEditMonto(String(t.amountARS||""));}} title="Editar monto" style={{
+                              background:"#fff",color:C.blue,border:"1px solid "+C.border,borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",
+                            }}>✏ Editar</button>
+                            <button onClick={()=>borrarCobro(t.id)} title="Borrar cobro" style={{
+                              background:"#fff",color:C.red,border:"1px solid "+C.red,borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",
+                            }}>🗑</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <button onClick={()=>{setShowGestion(false);setEditId(null);}} style={{...S.btnSec,width:"100%",justifyContent:"center",marginTop:16}}>Cerrar</button>
           </div>
         </div>
       )}
