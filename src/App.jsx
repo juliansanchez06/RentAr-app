@@ -100,21 +100,31 @@ function calcPricing(nights, base, cleaningCostPerNight=0, commPct=0, minNights=
 }
 
 const C = {
-  bg:"#f7f8fa", white:"#ffffff", border:"#e8eaed", borderMed:"#d1d5db",
-  text:"#0f172a", textSec:"#64748b", textMuted:"#94a3b8",
-  green:"#059669", greenLight:"#d1fae5", yellow:"#d97706", yellowLight:"#fef3c7",
-  red:"#dc2626", redLight:"#fee2e2", blue:"#1e3a6e", blueLight:"#dbeafe", blueMid:"#3b82f6",
-  shadow:"0 1px 3px rgba(0,0,0,0.08)", shadowMd:"0 4px 16px rgba(0,0,0,0.1)",
+  // ── Superficie neumórfica clara (tinte celeste) ──
+  bg:"#eef3fa", white:"#f5f8fc", border:"#dbe3ef", borderMed:"#c7d2e3",
+  text:"#16202e", textSec:"#4a5567", textMuted:"#6b7689",
+  green:"#15803d", greenLight:"#d6f0dd", yellow:"#b45309", yellowLight:"#f7eccb",
+  red:"#b91c1c", redLight:"#f6d8d8", blue:"#1d4ed8", blueLight:"#dbeafe", blueMid:"#2563eb",
+  // ── Acento celeste (sky) ──
+  sky:"#0369a1", skySoft:"#e0f2fe", skyMid:"#0ea5e9",
+  // ── Sombras neumórficas: luz arriba-izq, oscura azulada abajo-der ──
+  nmLight:"#ffffff", nmDark:"#cdd8e8",
+  shadow:"-5px -5px 12px #ffffff, 5px 5px 12px #cdd8e8",
+  shadowMd:"-8px -8px 18px #ffffff, 8px 8px 18px #cdd8e8",
+  shadowInset:"inset 3px 3px 7px #cdd8e8, inset -3px -3px 7px #ffffff",
+  shadowPressed:"inset -4px -4px 8px #ffffff, inset 4px 4px 8px #cdd8e8",
+  // ── Degradé de marca azul → celeste (CTA) ──
+  brandGrad:"linear-gradient(135deg,#1d4ed8 0%,#0369a1 100%)",
 };
 const S = {
-  card:     { background:C.white, border:"1px solid "+C.border, borderRadius:16, padding:24, boxShadow:C.shadow },
-  input:    { width:"100%", padding:"10px 14px", borderRadius:10, border:"1.5px solid "+C.border, background:C.white, color:C.text, fontSize:14, boxSizing:"border-box", outline:"none", fontFamily:"inherit" },
+  card:     { background:C.white, border:"none", borderRadius:18, padding:24, boxShadow:C.shadow },
+  input:    { width:"100%", padding:"11px 14px", borderRadius:12, border:"none", background:C.bg, color:C.text, fontSize:14, boxSizing:"border-box", outline:"none", fontFamily:"inherit", boxShadow:C.shadowInset },
   label:    { fontSize:12, fontWeight:600, color:C.textSec, display:"block", marginBottom:6 },
-  btn:      { background:C.blue,  color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 },
-  btnGreen: { background:C.green, color:"#fff", border:"none", borderRadius:10, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 },
-  btnSec:   { background:C.white, color:C.textSec, border:"1.5px solid "+C.border, borderRadius:10, padding:"10px 18px", fontSize:14, cursor:"pointer", fontWeight:500 },
-  modal:    { position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", backdropFilter:"blur(6px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
-  modalBox: { background:C.white, border:"1px solid "+C.border, borderRadius:20, padding:28, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:C.shadowMd, margin:"0 auto" },
+  btn:      { background:C.brandGrad, color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:C.shadow },
+  btnGreen: { background:"linear-gradient(135deg,#15803d,#0f9d58)", color:"#fff", border:"none", borderRadius:12, padding:"11px 20px", fontSize:14, fontWeight:600, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8, boxShadow:C.shadow },
+  btnSec:   { background:C.white, color:C.text, border:"none", borderRadius:12, padding:"11px 18px", fontSize:14, cursor:"pointer", fontWeight:600, boxShadow:C.shadow },
+  modal:    { position:"fixed", inset:0, background:"rgba(15,33,86,0.32)", backdropFilter:"blur(6px)", zIndex:100, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+  modalBox: { background:C.white, border:"none", borderRadius:22, padding:28, width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:C.shadowMd, margin:"0 auto" },
 };
 const NAV_ICONS = {
   dashboard:    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
