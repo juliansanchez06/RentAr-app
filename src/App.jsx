@@ -305,11 +305,10 @@ export default function App() {
 
   async function pinValue(key,value) {
     try {
-      // Store everything as simple string values - most compatible with Firestore
       const toStore = typeof value === "object" ? JSON.stringify(value) : value;
-      const updated = { ...pinnedValues, [key]: toStore };
-      setPinnedValues(updated);
-      await setDoc(doc(db,"re_config","pinned"), updated, {merge:true});
+      setPinnedValues(prev => ({ ...prev, [key]: toStore }));
+      // Escribir SOLO el campo cambiado (merge), para no pisar otros valores ya guardados (ej. gastos)
+      await setDoc(doc(db,"re_config","pinned"), { [key]: toStore }, {merge:true});
     } catch(e) {
       console.error("pinValue error:", e);
       alert("Error al guardar: " + e.message);
@@ -468,7 +467,7 @@ export default function App() {
             <div style={{ color:C.textSec, fontSize:14 }}>Cargando datos...</div>
           </div>
         ) : page==="dashboard"    ? <Dashboard    {...shared}/>
-          : page==="equilibrio"   ? <Equilibrio   tc={tc} pinnedValues={pinnedValues} pinValue={pinValue} db={db}/>
+          : page==="equilibrio"   ? <Equilibrio   tc={tc} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
@@ -1123,7 +1122,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
-function Equilibrio({ tc, pinnedValues, pinValue, db }) {
+function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
   const defaultGastos = [
     { id:1, nombre:"Internet",             monto:15000 },
     { id:2, nombre:"Expensas",             monto:45000 },
@@ -1148,7 +1147,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
   const [targetGanancia,setTargetGanancia] = useState(pinnedValues?.targetGanancia||200);
   const [commAirbnb,setCommAirbnb]     = useState(pinnedValues?.commAirbnb||15);
   const [commBooking,setCommBooking]   = useState(pinnedValues?.commBooking||15);
-  const [platform,setPlatform]         = useState("direct");
+  const [platform,setPlatform]         = useState(pinnedValues?.platform||"direct");
   const [gastosSaved,setGastosSaved]   = useState(false);
   const [saveMsg,setSaveMsg]           = useState("");
   const [moneda,setMoneda]             = useState("ARS"); // ARS o USD por gasto
@@ -1210,7 +1209,25 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         limpCostoHora: Number(limpCostoHora),
         lavadoCosto: Number(lavadoCosto),
         limpCada: Number(limpCada),
+        platform: String(platform),
       }, { merge: true });
+      // Mantener pinnedValues global en sincronía para que un pin posterior no pise estos valores
+      setPinnedValues && setPinnedValues(prev=>({ ...prev,
+        gastos: gastosStr,
+        targetGanancia: Number(targetGanancia),
+        commAirbnb: Number(commAirbnb),
+        commBooking: Number(commBooking),
+        minNights: Number(minNights),
+        tarifaBase: Number(tarifaBase),
+        desc2Pers: Number(desc2Pers),
+        desc1Pers: Number(desc1Pers),
+        commGestion: Number(commGestion),
+        limpHoras: Number(limpHoras),
+        limpCostoHora: Number(limpCostoHora),
+        lavadoCosto: Number(lavadoCosto),
+        limpCada: Number(limpCada),
+        platform: String(platform),
+      }));
 
       setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
       setGastosSaved(true);
@@ -1322,7 +1339,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
             {key:"booking", label:"Booking", val:commBooking, set:setCommBooking, color:"#003580", pinKey:"commBooking"},
             {key:"direct",  label:"Directa", val:0,           set:null,           color:C.green,   pinKey:null},
           ].map(({key,label,val,set,color,pinKey})=>(
-            <div key={key} onClick={()=>setPlatform(key)} style={{
+            <div key={key} onClick={()=>{setPlatform(key); pinValue("platform",key);}} style={{
               background:platform===key?C.bg:C.white,
               border:"2px solid "+(platform===key?color:C.border),
               borderRadius:12, padding:"12px", cursor:"pointer",
@@ -1768,6 +1785,46 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
             </strong>{" "}con el depto lleno.
             {commPct>0&&<span> Recordá el {commPct}% de comisión de {platform==="airbnb"?"Airbnb":"Booking"}.</span>}
           </div>
+        </div>
+      </div>
+
+      {/* 📖 Referencias / cómo leer el simulador */}
+      <div style={{...S.card,marginTop:16}}>
+        <div style={{fontSize:15,fontWeight:800,color:C.blue,marginBottom:4}}>📖 Cómo leer el simulador</div>
+        <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>Qué significa cada número de la matriz de arriba.</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:12}}>
+          {[
+            {t:"Filas y columnas",d:"Cada fila es la cantidad de personas (con su descuento de grupo). Cada columna es la duración de la estadía, en noches."},
+            {t:"Precio / noche",d:"Lo que cobrás por noche. Ya incluye el recargo por estadía corta (1–2 noches) o el descuento por estadía larga."},
+            {t:"Huésped paga",d:"El total de la reserva = precio por noche × cantidad de noches."},
+            {t:"Recibís vos",d:"Tu ganancia neta de esa reserva, después de restar comisiones y limpieza."},
+            {t:"com. (comisión)",d:"Comisión de la plataforma (Airbnb o Booking). En venta directa es 0%."},
+            {t:"gest. (gestión)",d:"Comisión por gestión del depto. Se descuenta siempre, además de la de plataforma."},
+            {t:"limp. (limpieza)",d:"Costo de limpieza de la estadía. El (2×), (3×)… indica cuántas limpiezas hay: se limpia cada X noches, también al medio en estadías largas."},
+            {t:"Badge inferior (ej. 14× = 28n/mes)",d:"Cuántas reservas de ese tipo necesitás en el mes para cubrir gastos + meta, y cuántas noches ocupadas representa."},
+          ].map(r=>(
+            <div key={r.t} style={{background:C.bg,borderRadius:10,padding:"10px 12px",boxShadow:C.shadowInset}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:3}}>{r.t}</div>
+              <div style={{fontSize:11,color:C.textSec,lineHeight:1.5}}>{r.d}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:14,display:"flex",gap:16,flexWrap:"wrap"}}>
+          {[
+            {c:C.green,bg:C.greenLight,l:"Verde: 1 reserva cubre gastos + meta"},
+            {c:C.yellow,bg:C.yellowLight,l:"Amarillo: cubre gastos, no la meta completa"},
+            {c:C.textMuted,bg:C.white,l:"Sin color: no cubre gastos"},
+            {c:C.red,bg:C.redLight,l:"Rojo: bajo el mínimo de noches"},
+            {c:C.blue,bg:C.blueLight,l:"Azul: tu mínimo de noches elegido"},
+          ].map(x=>(
+            <div key={x.l} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:12,height:12,borderRadius:3,background:x.bg,border:"1px solid "+x.c}}/>
+              <span style={{fontSize:11,color:C.textSec}}>{x.l}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:14,padding:"12px 14px",background:C.skySoft,borderRadius:10,fontSize:12,color:C.text,lineHeight:1.6}}>
+          <strong style={{color:C.blue}}>Cuenta completa:</strong> Recibís vos = (precio × noches) − comisión de plataforma − comisión de gestión − limpieza. La limpieza se cobra una vez cada {limpCada} {limpCada===1?"noche":"noches"}; por eso, a más noches, el costo de limpieza por noche baja.
         </div>
       </div>
 
