@@ -1156,8 +1156,10 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
   const [tarifaBase,setTarifaBase]     = useState(pinnedValues?.tarifaBase||70000);
   const [desc2Pers,setDesc2Pers]       = useState(pinnedValues?.desc2Pers||10);
   const [desc1Pers,setDesc1Pers]       = useState(pinnedValues?.desc1Pers||20);
+  const [commGestion,setCommGestion]   = useState(pinnedValues?.commGestion||0);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
+  const commTotal = commPct + Number(commGestion||0); // plataforma + gestión del depto (ambas sobre el bruto)
 
   // Convertir cada gasto a ARS para operar
   function gastoEnARS(g) {
@@ -1194,6 +1196,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         tarifaBase: Number(tarifaBase),
         desc2Pers: Number(desc2Pers),
         desc1Pers: Number(desc1Pers),
+        commGestion: Number(commGestion),
       }, { merge: true });
 
       setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
@@ -1227,12 +1230,13 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
     const pm = pricingMultiplier(noches);
     const cleaningFeeTotal = noches >= 7 ? 15000 : noches >= 3 ? 15000*Math.ceil(noches/3) : 15000;
     const ingresoNecBase = ingresoNecesarioARS / pm.mult;
-    const brutoNecesario = Math.ceil((ingresoNecBase+cleaningFeeTotal)/(1-commPct/100)/noches/1000)*1000;
+    const brutoNecesario = Math.ceil((ingresoNecBase+cleaningFeeTotal)/(1-commTotal/100)/noches/1000)*1000;
     const ingresoBruto   = brutoNecesario*noches+cleaningFeeTotal;
     const comision       = Math.round(ingresoBruto*commPct/100);
-    const ingresoNeto    = ingresoBruto-comision;
+    const comisionGestion= Math.round(ingresoBruto*Number(commGestion||0)/100);
+    const ingresoNeto    = ingresoBruto-comision-comisionGestion;
     const gananciaUSD    = arsToUsd(ingresoNeto-totalGastosARS-cleaningFeeTotal,tc);
-    return {noches,brutoNecesario,ingresoBruto,comision,ingresoNeto,cleaningFeeTotal,gananciaUSD,
+    return {noches,brutoNecesario,ingresoBruto,comision,comisionGestion,ingresoNeto,cleaningFeeTotal,gananciaUSD,
       ocupacion:Math.round(noches/30*100), pm};
   });
 
@@ -1272,6 +1276,30 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
         </div>
       </div>
 
+      {/* 📘 ¿Cómo funciona? — explicación en lenguaje claro */}
+      <div style={{...S.card,marginBottom:16,background:C.skySoft}}>
+        <div style={{fontSize:14,fontWeight:800,color:C.blue,marginBottom:10}}>📘 ¿Cómo funciona este simulador? (en 4 pasos)</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
+          {[
+            {n:"1",t:"Tus números",d:"Cargás los gastos fijos del mes y la ganancia que querés en USD. El simulador calcula cuánta plata neta tenés que generar por mes."},
+            {n:"2",t:"Comisiones",d:"Elegís la plataforma (Directa, Airbnb o Booking) y la comisión por gestión del depto. Esas comisiones se descuentan de lo que cobrás."},
+            {n:"3",t:"Política de noches",d:"El precio sube si la estadía es corta (1–2 noches) y baja en estadías largas (semana, mes). Vos definís el mínimo de noches."},
+            {n:"4",t:"Resultado",d:"Para cada combinación de personas × noches ves: precio por noche, lo que paga el huésped, lo que te queda a vos y cuántas reservas necesitás para tu meta."},
+          ].map(step=>(
+            <div key={step.n} style={{background:C.white,borderRadius:12,padding:"12px 14px",boxShadow:C.shadow}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <div style={{width:24,height:24,borderRadius:8,background:C.brandGrad,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,flexShrink:0}}>{step.n}</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{step.t}</div>
+              </div>
+              <div style={{fontSize:12,color:C.textSec,lineHeight:1.5}}>{step.d}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:12,fontSize:12,color:C.text,background:C.white,borderRadius:10,padding:"10px 12px",boxShadow:C.shadowInset}}>
+          <strong style={{color:C.blue}}>Lo que te queda a vos</strong> = precio × noches − comisión de plataforma − comisión de gestión − limpieza.
+        </div>
+      </div>
+
       {/* Comisiones */}
       <div style={{...S.card,marginBottom:16}}>
         <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Comisiones de plataformas</div>
@@ -1302,6 +1330,21 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
               )}
             </div>
           ))}
+        </div>
+
+        {/* 🛠️ Comisión por gestión del depto — se aplica SIEMPRE, además de la plataforma */}
+        <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div style={{maxWidth:380}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text}}>🛠️ Comisión por gestión del depto</div>
+            <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Se descuenta <strong>siempre</strong>, además de la comisión de plataforma (limpieza, check-in, atención al huésped…).</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <input type="number" value={commGestion} min={0} max={50}
+              onChange={e=>{setCommGestion(Number(e.target.value));setGastosSaved(false);}}
+              style={{...S.input,width:64,textAlign:"center",fontWeight:700,fontSize:18,padding:"6px 8px"}}/>
+            <span style={{fontSize:14,color:C.textSec,fontWeight:700}}>%</span>
+            <PinBtn pinKey="commGestion" value={commGestion} pinnedValues={pinnedValues} pinValue={pinValue}/>
+          </div>
         </div>
       </div>
 
@@ -1438,6 +1481,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
           <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>
             Plataforma: <strong>{platform==="direct"?"Directa":platform==="airbnb"?"Airbnb":"Booking"}</strong>
             {commPct>0&&<span style={{color:C.red}}> (−{commPct}%)</span>}
+            {commGestion>0&&<span style={{color:C.red}}> · gestión −{commGestion}%</span>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 80px 50px",gap:8,padding:"6px 10px",marginBottom:4}}>
             {["Noches","Precio/noche","Ing. neto","Ganancia",""].map(h=>(
@@ -1508,6 +1552,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
             }}>
               {platform==="direct"?"✓ Sin comisión":platform==="airbnb"?`Airbnb −${commAirbnb}%`:`Booking −${commBooking}%`}
             </span>
+            {commGestion>0&&<span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,background:"#fde68a",color:"#854d0e"}}>🛠️ Gestión −{commGestion}%</span>}
             <span style={{fontSize:11,color:C.textMuted}}>· Mínimo {minNights} {minNights===1?"noche":"noches"}</span>
           </div>
         </div>
@@ -1567,7 +1612,8 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                       const costoLimpiezaNoche = 5000; // costo interno por noche, no se cobra al huésped
                       const bruto       = precioNoche * noches; // solo precio × noches, sin limpieza
                       const comision    = Math.round(bruto * commPct / 100);
-                      const netoComision= bruto - comision;
+                      const comisionGestion = Math.round(bruto * Number(commGestion||0) / 100);
+                      const netoComision= bruto - comision - comisionGestion;
                       const costoLimp   = costoLimpiezaNoche * noches;
                       const neto        = netoComision - costoLimp; // ganancia real
                       const netoUSD     = arsToUsd(neto, tc);
@@ -1608,9 +1654,10 @@ function Equilibrio({ tc, pinnedValues, pinValue, db }) {
                               <div style={{fontSize:11,fontWeight:700,color:C.green,marginTop:3}}>{fARS(neto)}</div>
                               <div style={{fontSize:10,color:C.green,fontWeight:600}}>{fUSD(netoUSD)}</div>
                               <div style={{fontSize:9,color:C.textMuted}}>recibís vos</div>
-                              {(commPct>0||costoLimp>0)&&(
+                              {(commPct>0||comisionGestion>0||costoLimp>0)&&(
                                 <div style={{fontSize:8,color:C.red,marginTop:1}}>
                                   {commPct>0?`−${fARS(comision)} com.`:""}
+                                  {comisionGestion>0?` −${fARS(comisionGestion)} gest.`:""}
                                   {costoLimp>0?` −${fARS(costoLimp)} limp.`:""}
                                 </div>
                               )}
