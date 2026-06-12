@@ -1687,9 +1687,11 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
                       const comisionGestion = Math.round(bruto * Number(commGestion||0) / 100);
                       const netoComision= bruto - comision - comisionGestion;
                       const costoLimp   = numLimpiezas(noches) * costoPorLimpieza; // 1 limpieza cada limpCada noches
-                      const neto        = netoComision - costoLimp; // ganancia real
+                      const neto        = netoComision - costoLimp; // ganancia de la reserva (antes de gastos fijos)
                       const netoUSD     = arsToUsd(neto, tc);
                       const gastosUSD   = totalGastosUSD;
+                      const gastosPropUSD   = totalGastosUSD * (noches/30); // parte proporcional de gastos fijos del mes
+                      const gananciaRealUSD = netoUSD - gastosPropUSD;       // ganancia limpia de esta reserva
 
                       // ¿Cuántas reservas de este tipo necesito para cubrir gastos + meta?
                       const reservasNecesarias = netoUSD > 0
@@ -1733,6 +1735,13 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
                                   {costoLimp>0?` −${fARS(costoLimp)} limp.${numLimpiezas(noches)>1?` (${numLimpiezas(noches)}×)`:""}`:""}
                                 </div>
                               )}
+
+                              {/* Ganancia neta descontando la parte proporcional de gastos fijos del mes */}
+                              <div title={`Ganancia de la reserva ${fUSD(Math.round(netoUSD))} − parte de gastos fijos ${fUSD(Math.round(gastosPropUSD))} (${noches}/30 del mes)`}
+                                   style={{fontSize:11,fontWeight:800,color:gananciaRealUSD>=0?C.green:C.red,marginTop:4,paddingTop:4,borderTop:"1px dashed "+C.borderMed}}>
+                                {fUSD(Math.round(gananciaRealUSD))}
+                              </div>
+                              <div style={{fontSize:8,color:C.textMuted}}>neto real (−fijos)</div>
 
                               {/* Cuántas reservas necesito */}
                               <div style={{
@@ -1797,7 +1806,8 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
             {t:"Filas y columnas",d:"Cada fila es la cantidad de personas (con su descuento de grupo). Cada columna es la duración de la estadía, en noches."},
             {t:"Precio / noche",d:"Lo que cobrás por noche. Ya incluye el recargo por estadía corta (1–2 noches) o el descuento por estadía larga."},
             {t:"Huésped paga",d:"El total de la reserva = precio por noche × cantidad de noches."},
-            {t:"Recibís vos",d:"Tu ganancia neta de esa reserva, después de restar comisiones y limpieza."},
+            {t:"Recibís vos",d:"Tu ganancia neta de esa reserva, después de restar comisiones y limpieza (todavía sin tus gastos fijos del mes)."},
+            {t:"Neto real (−fijos)",d:"Lo que realmente te queda de esa reserva descontando además la parte proporcional de tus gastos fijos del mes, según las noches que ocupa (noches/30). Verde = positivo, rojo = pierde."},
             {t:"com. (comisión)",d:"Comisión de la plataforma (Airbnb o Booking). En venta directa es 0%."},
             {t:"gest. (gestión)",d:"Comisión por gestión del depto. Se descuenta siempre, además de la de plataforma."},
             {t:"limp. (limpieza)",d:"Costo de limpieza de la estadía. El (2×), (3×)… indica cuántas limpiezas hay: se limpia cada X noches, también al medio en estadías largas."},
