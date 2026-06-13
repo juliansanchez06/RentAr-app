@@ -2608,7 +2608,11 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                         <div style={{textAlign:"right",marginLeft:10}}>
                           <div style={{fontSize:14,fontWeight:700,color:C.green}}>{fARS(b.totalNetoARS||b.totalARS)}</div>
                           {b.comisionARS>0&&<div style={{fontSize:10,color:C.red}}>−{fARS(b.comisionARS)} com.</div>}
-                          <button onClick={()=>deleteBooking(b.id,b.guestName)} style={{marginTop:6,background:C.redLight,border:"none",color:C.red,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:600}}>
+                          <button onClick={async(e)=>{e.stopPropagation(); try{ await updateDoc(doc(db,"re_bookings",b.id),{cobrado:!b.cobrado, cobradoEn:!b.cobrado?new Date().toISOString():null}); await reload(); }catch(err){alert("Error: "+err.message);} }}
+                            style={{display:"block",marginLeft:"auto",marginTop:6,background:b.cobrado?C.greenLight:C.white,boxShadow:C.shadow,border:"none",color:b.cobrado?C.green:C.textSec,borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>
+                            {b.cobrado?"✓ Cobrado":"Marcar cobrado"}
+                          </button>
+                          <button onClick={(e)=>{e.stopPropagation();deleteBooking(b.id,b.guestName);}} style={{display:"block",marginLeft:"auto",marginTop:6,background:C.redLight,border:"none",color:C.red,borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontWeight:600}}>
                             🗑 Eliminar
                           </button>
                         </div>
