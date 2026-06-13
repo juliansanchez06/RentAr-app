@@ -2664,10 +2664,10 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                 <div style={{fontSize:12,fontWeight:700,color:C.green,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:12}}>💰 Desglose financiero</div>
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {[
-                    {label:"Precio/noche", value:fARS(selectedBooking.precioNocheUsado||Math.round((selectedBooking.totalARS||0)/(selectedBooking.nights||1))), usd:fUSD(arsToUsd(selectedBooking.precioNocheUsado||0,tc))},
-                    {label:"Total huésped ("+selectedBooking.nights+"n)", value:fARS(selectedBooking.totalARS||0), usd:fUSD(arsToUsd(selectedBooking.totalARS||0,tc))},
-                    {label:"Comisión "+((selectedBooking.commissionPct||0)+"%"), value:"−"+fARS(selectedBooking.comisionARS||0), usd:"−"+fUSD(arsToUsd(selectedBooking.comisionARS||0,tc)), red:true},
-                    {label:"Recibís vos (neto)", value:fARS(selectedBooking.totalNetoARS||0), usd:fUSD(selectedBooking.totalUSD||arsToUsd(selectedBooking.totalNetoARS||0,tc)), bold:true},
+                    {label:"Precio/noche", value:fARS(selectedBooking.precioNocheUsado||Math.round((selectedBooking.totalARS||0)/(selectedBooking.nights||1))), usd:fUSD(arsToUsd(selectedBooking.precioNocheUsado||0,selectedBooking.exchangeRateUsed||tc))},
+                    {label:"Total huésped ("+selectedBooking.nights+"n)", value:fARS(selectedBooking.totalARS||0), usd:fUSD(arsToUsd(selectedBooking.totalARS||0,selectedBooking.exchangeRateUsed||tc))},
+                    {label:"Comisión "+((selectedBooking.commissionPct||0)+"%"), value:"−"+fARS(selectedBooking.comisionARS||0), usd:"−"+fUSD(arsToUsd(selectedBooking.comisionARS||0,selectedBooking.exchangeRateUsed||tc)), red:true},
+                    {label:"Recibís vos (neto)", value:fARS(selectedBooking.totalNetoARS||0), usd:fUSD(selectedBooking.totalUSD||arsToUsd(selectedBooking.totalNetoARS||0,selectedBooking.exchangeRateUsed||tc)), bold:true},
                   ].map(({label,value,usd,red,bold})=>(
                     <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid rgba(5,150,105,0.2)"}}>
                       <span style={{fontSize:13,color:"#065f46"}}>{label}</span>
@@ -2695,7 +2695,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                   const b2 = selectedBooking;
                   const w = window.open("","_blank");
                   const totalARS = b2.totalARS||0;
-                  const totalUSD = b2.totalUSD||arsToUsd(b2.totalNetoARS||0,tc);
+                  const totalUSD = b2.totalUSD||arsToUsd(b2.totalNetoARS||0,b2.exchangeRateUsed||tc);
                   const netoARS  = b2.totalNetoARS||0;
                   const comARS   = b2.comisionARS||0;
                   const pNoche   = b2.precioNocheUsado||Math.round(totalARS/(b2.nights||1));
