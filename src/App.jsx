@@ -572,6 +572,16 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const cap2=val2>0&&net2USD>0?(net2USD*12/val2)*100:0, pb2=net2USD>0?val2/(net2USD*12):null;
 
   const totalVal=val1+val2, totalNet=net1USD+net2USD, totalInc=inc1USD+inc2USD;
+
+  // ── Ingreso del mes REALMENTE cobrado (renta fija real + temporal de reservas marcadas "cobrado") ──
+  const reservasCobradasMes = bookings.filter(b=>{
+    const ci = new Date(b.checkIn);
+    return b.cobrado && ci.getMonth()===now.getMonth() && ci.getFullYear()===now.getFullYear();
+  });
+  const net2RealUSD = reservasCobradasMes.reduce((s,b)=>s+(b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)),0);
+  const inc2RealUSD = reservasCobradasMes.reduce((s,b)=>s+arsToUsd(b.totalARS||b.totalNetoARS||0,tc),0);
+  const ingresoNetoMesUSD  = net1USD + net2RealUSD;   // cobrado, no estimado
+  const ingresoBrutoMesUSD = inc1USD + inc2RealUSD;
   const netYield=totalVal>0?(totalNet*12/totalVal)*100:0;
   const irr=calcIRR(totalVal,totalNet*12,totalVal,20);
 
@@ -691,7 +701,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
       <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
           {label:"Valor del portfolio",value:fUSD(totalVal),sub:`${properties.length} propiedades`,accent:C.text},
-          {label:"Ingreso neto / mes", value:fUSD(totalNet),sub:`bruto ${fUSD(totalInc)}`,accent:C.green},
+          {label:"Ingreso neto / mes", value:fUSD(ingresoNetoMesUSD),sub:`cobrado · bruto ${fUSD(ingresoBrutoMesUSD)}`,accent:C.green},
           {label:"Rentabilidad neta",  value:fPct(netYield),sub:"anual en USD",accent:netYield>4?C.green:C.yellow},
           {label:"TIR estimada",       value:fPct(irr),     sub:"proyección 20 años",accent:irr>6?C.green:irr>3?C.yellow:C.red},
         ].map(({label,value,sub,accent})=>(
