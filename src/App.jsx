@@ -294,8 +294,8 @@ export default function App() {
           sqm:                Number(data.sqm                || 0),
         };
       }));
-      setTransactions(ts.docs.map(d=>({id:d.id,...d.data()})));
-      setBookings(bs.docs.map(d=>({id:d.id,...d.data()})));
+      setTransactions(ts.docs.map(d=>({...d.data(),id:d.id})));
+      setBookings(bs.docs.map(d=>({...d.data(),id:d.id})));
       if (pinDoc.exists()) { const data=pinDoc.data(); setPinnedValues(data); if(data.tc) setTc(data.tc); }
       setFbStatus("connected");
     } catch(e) { console.error(e); setFbStatus("error"); }
@@ -1167,6 +1167,8 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
   // Hay que limpiar al menos cada "limpCada" noches (también al medio en estadías largas)
   const limpCadaN = Math.max(1, Number(limpCada||3));
   const numLimpiezas = (noches) => Math.max(1, Math.ceil(noches / limpCadaN));
+  // Ocupación mensual estimada (se elige en el Dashboard). Tope: 30 noches (no se puede ocupar más que el mes)
+  const nochesEstimadas = Math.min(30, Math.max(1, Number(pinnedValues?.nights||12)));
 
   // Convertir cada gasto a ARS para operar
   function gastoEnARS(g) {
@@ -1614,7 +1616,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
           <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:4}}>🧮 Simulador de precio</div>
           <div style={{fontSize:18,fontWeight:800,letterSpacing:"-0.5px"}}>Matriz personas × noches</div>
           <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:4}}>
-            <span style={{fontSize:12,color:C.textSec}}>Gastos: {fUSD(totalGastosUSD)}/mes · Meta: {fUSD(targetGanancia)}/mes</span>
+            <span style={{fontSize:12,color:C.textSec}}>Gastos: {fUSD(totalGastosUSD)}/mes · Meta: {fUSD(targetGanancia)}/mes · Ocupación est.: {nochesEstimadas} n/mes (Dashboard)</span>
             <span style={{
               fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
               background:platform==="direct"?C.greenLight:platform==="airbnb"?"#fff0f0":"#e8f0fe",
@@ -1692,13 +1694,12 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
                       const gastosPropUSD   = totalGastosUSD * (noches/30); // parte proporcional de gastos fijos del mes
                       const gananciaRealUSD = netoUSD - gastosPropUSD;       // ganancia limpia de esta reserva
 
-                      // ¿Cuántas reservas de este tipo necesito para cubrir gastos + meta?
-                      const reservasNecesarias = netoUSD > 0
-                        ? Math.ceil((gastosUSD + targetGanancia) / netoUSD)
-                        : null;
-                      const nochesNecesarias = reservasNecesarias ? reservasNecesarias * noches : null;
-                      const cubre = netoUSD >= (gastosUSD + targetGanancia);
-                      const parcial = !cubre && netoUSD > gastosUSD;
+                      // Con tu ocupación estimada del mes (Dashboard, tope 30): cuántas reservas entran y cuánto ganás
+                      const reservasMes    = Math.floor(nochesEstimadas / noches);   // reservas de esta duración que entran en tu ocupación
+                      const nochesUsadas   = reservasMes * noches;
+                      const gananciaMesUSD = reservasMes * netoUSD - gastosUSD;       // ganancia neta del mes a esa ocupación
+                      const cubre   = reservasMes>0 && gananciaMesUSD >= targetGanancia;  // llega a la meta
+                      const parcial = reservasMes>0 && !cubre && gananciaMesUSD >= 0;     // cubre gastos pero no la meta
 
                       return (
                         <td key={noches} style={{
@@ -1742,17 +1743,17 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
                               </div>
                               <div style={{fontSize:8,color:C.textMuted}}>neto real (−fijos)</div>
 
-                              {/* Cuántas reservas necesito */}
-                              <div style={{
+                              {/* A tu ocupación estimada del mes */}
+                              <div title={`Con ${nochesEstimadas} noches/mes estimadas (Dashboard): ${reservasMes} reserva(s) de ${noches} = ${nochesUsadas} noches ocupadas`}
+                                   style={{
                                 marginTop:6,padding:"3px 6px",borderRadius:6,
-                                background:cubre?C.green:parcial?C.yellow:C.textMuted,
+                                background:reservasMes>0?(cubre?C.green:parcial?C.yellow:C.red):C.textMuted,
                                 color:"#fff",fontSize:9,fontWeight:700,
                               }}>
-                                {cubre
-                                  ? "✓ 1 reserva = meta"
-                                  : reservasNecesarias
-                                  ? `${reservasNecesarias}× = ${nochesNecesarias}n/mes`
-                                  : "No alcanza"}
+                                {reservasMes>0 ? `${reservasMes}× = ${nochesUsadas}n/mes` : "no entra en el mes"}
+                              </div>
+                              <div style={{fontSize:9,fontWeight:800,marginTop:2,color:cubre?C.green:parcial?C.yellow:C.red}}>
+                                {reservasMes>0 ? `${fUSD(Math.round(gananciaMesUSD))}/mes` : "—"}
                               </div>
                             </>
                           )}
@@ -1769,9 +1770,9 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
         {/* Leyenda */}
         <div style={{display:"flex",gap:16,marginTop:14,flexWrap:"wrap"}}>
           {[
-            {color:C.green,  bg:C.greenLight,  label:"1 reserva cubre gastos + meta"},
+            {color:C.green,  bg:C.greenLight,  label:"A tu ocupación: llegás a la meta"},
             {color:C.yellow, bg:C.yellowLight, label:"Cubre gastos, no la meta completa"},
-            {color:C.textMuted,bg:"transparent",border:C.border, label:"No cubre gastos"},
+            {color:C.textMuted,bg:"transparent",border:C.border, label:"No cubre gastos / no entra en el mes"},
             {color:C.red,    bg:"#fff5f5",     label:"Bajo mínimo de noches"},
           ].map(({color,bg,border,label})=>(
             <div key={label} style={{display:"flex",alignItems:"center",gap:6}}>
@@ -1810,7 +1811,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
             {t:"com. (comisión)",d:"Comisión de la plataforma (Airbnb o Booking). En venta directa es 0%."},
             {t:"gest. (gestión)",d:"Comisión por gestión del depto. Se descuenta siempre, además de la de plataforma."},
             {t:"limp. (limpieza)",d:"Costo de limpieza de la estadía. El (2×), (3×)… indica cuántas limpiezas hay: se limpia cada X noches, también al medio en estadías largas."},
-            {t:"Badge inferior (ej. 14× = 28n/mes)",d:"Cuántas reservas de ese tipo necesitás en el mes para cubrir gastos + meta, y cuántas noches ocupadas representa."},
+            {t:"Badge inferior (ej. 6× = 12n/mes)",d:"Usa tu ocupación estimada del mes (la elegís en el Dashboard, tope 30 noches): cuántas reservas de esta duración entran, cuántas noches ocupás, y abajo tu ganancia neta del mes a esa ocupación. Verde = llegás a la meta."},
           ].map(r=>(
             <div key={r.t} style={{background:C.bg,borderRadius:10,padding:"10px 12px",boxShadow:C.shadowInset}}>
               <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:3}}>{r.t}</div>
@@ -1820,7 +1821,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
         </div>
         <div style={{marginTop:14,display:"flex",gap:16,flexWrap:"wrap"}}>
           {[
-            {c:C.green,bg:C.greenLight,l:"Verde: 1 reserva cubre gastos + meta"},
+            {c:C.green,bg:C.greenLight,l:"Verde: a tu ocupación, llegás a la meta"},
             {c:C.yellow,bg:C.yellowLight,l:"Amarillo: cubre gastos, no la meta completa"},
             {c:C.textMuted,bg:C.white,l:"Sin color: no cubre gastos"},
             {c:C.red,bg:C.redLight,l:"Rojo: bajo el mínimo de noches"},
@@ -3154,7 +3155,7 @@ function Movimientos({ db }) {
   useEffect(() => {
     getDocs(collection(db, "re_movimientos"))
       .then(snap => {
-        setMovimientos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setMovimientos(snap.docs.map(d => ({ ...d.data(), id: d.id })));
       })
       .catch(e => console.error(e))
       .finally(() => setLoading(false));
