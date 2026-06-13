@@ -1167,13 +1167,17 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
   const [commGestion,setCommGestion]   = useState(pinnedValues?.commGestion||0);
   const [limpHoras,setLimpHoras]       = useState(pinnedValues?.limpHoras??1.5);
   const [limpCostoHora,setLimpCostoHora] = useState(pinnedValues?.limpCostoHora||8000);
-  const [lavadoCosto,setLavadoCosto]   = useState(pinnedValues?.lavadoCosto||14000);
+  const [lavado1,setLavado1]           = useState(pinnedValues?.lavado1 ?? 10000);   // 1 persona (1 cama individual)
+  const [lavado2,setLavado2]           = useState(pinnedValues?.lavado2 ?? (pinnedValues?.lavadoCosto||14000)); // matrimonio (1 cama doble)
+  const [lavado3,setLavado3]           = useState(pinnedValues?.lavado3 ?? 20000);   // 3 personas (camas extra)
   const [limpCada,setLimpCada]         = useState(pinnedValues?.limpCada||3);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
   const commTotal = commPct + Number(commGestion||0); // plataforma + gestión del depto (ambas sobre el bruto)
   // Limpieza = costo FIJO por estadía (1 limpieza + 1 lavado por inquilino), NO por noche
-  const costoPorLimpieza = Math.round(Number(limpHoras||0)*Number(limpCostoHora||0) + Number(lavadoCosto||0));
+  const lavadoPorPersonas = (personas) => personas<=1 ? Number(lavado1||0) : personas===2 ? Number(lavado2||0) : Number(lavado3||0);
+  const costoLimpieza = (personas) => Math.round(Number(limpHoras||0)*Number(limpCostoHora||0) + lavadoPorPersonas(personas));
+  const costoPorLimpieza = costoLimpieza(2); // representativo (matrimonio) para vistas que no dependen de personas
   // Hay que limpiar al menos cada "limpCada" noches (también al medio en estadías largas)
   const limpCadaN = Math.max(1, Number(limpCada||3));
   const numLimpiezas = (noches) => Math.max(1, Math.ceil(noches / limpCadaN));
@@ -1218,7 +1222,10 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
         commGestion: Number(commGestion),
         limpHoras: Number(limpHoras),
         limpCostoHora: Number(limpCostoHora),
-        lavadoCosto: Number(lavadoCosto),
+        lavado1: Number(lavado1),
+        lavado2: Number(lavado2),
+        lavado3: Number(lavado3),
+        lavadoCosto: Number(lavado2),
         limpCada: Number(limpCada),
         platform: String(platform),
       }, { merge: true });
@@ -1235,7 +1242,10 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
         commGestion: Number(commGestion),
         limpHoras: Number(limpHoras),
         limpCostoHora: Number(limpCostoHora),
-        lavadoCosto: Number(lavadoCosto),
+        lavado1: Number(lavado1),
+        lavado2: Number(lavado2),
+        lavado3: Number(lavado3),
+        lavadoCosto: Number(lavado2),
         limpCada: Number(limpCada),
         platform: String(platform),
       }));
@@ -1396,10 +1406,14 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
             <div style={{fontSize:14,fontWeight:700,color:C.text}}>🧹 Costo de limpieza</div>
             <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Cada limpieza incluye trabajo + lavado de sábanas y toallas. Hay que limpiar <strong>cada {limpCada} {limpCada===1?"noche":"noches"}</strong> (también al medio en estadías largas). En estadías cortas, la misma limpieza se reparte entre más noches.</div>
           </div>
-          <div style={{textAlign:"right",background:C.bg,borderRadius:10,padding:"8px 14px",boxShadow:C.shadowInset,minWidth:130}}>
-            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px"}}>Por cada limpieza</div>
-            <div style={{fontSize:20,fontWeight:800,color:C.red}}>{fARS(costoPorLimpieza)}</div>
-            <div style={{fontSize:11,color:C.textSec}}>{fUSD(arsToUsd(costoPorLimpieza,tc))}</div>
+          <div style={{textAlign:"right",background:C.bg,borderRadius:10,padding:"8px 14px",boxShadow:C.shadowInset,minWidth:170}}>
+            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:4}}>Por cada limpieza</div>
+            {[{p:1,l:"👤 1 persona"},{p:2,l:"💑 Matrimonio"},{p:3,l:"👨‍👩‍👦 3 personas"}].map(({p,l})=>(
+              <div key={p} style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12,marginTop:2}}>
+                <span style={{color:C.textSec}}>{l}</span>
+                <strong style={{color:C.red}}>{fARS(costoLimpieza(p))}</strong>
+              </div>
+            ))}
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
@@ -1414,19 +1428,34 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
               onChange={e=>{setLimpCostoHora(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
           <div>
-            <label style={S.label}>Lavado sábanas + toallas (ARS)</label>
-            <input type="number" min={0} value={lavadoCosto}
-              onChange={e=>{setLavadoCosto(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-          </div>
-          <div>
             <label style={S.label}>Limpiar cada (noches)</label>
             <input type="number" min={1} value={limpCada}
               onChange={e=>{setLimpCada(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
         </div>
+        <div style={{marginTop:12}}>
+          <label style={S.label}>Lavado de sábanas y toallas — según cuántos duermen (ARS)</label>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
+            <div>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>👤 1 persona</div>
+              <input type="number" min={0} value={lavado1}
+                onChange={e=>{setLavado1(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>💑 Matrimonio (2)</div>
+              <input type="number" min={0} value={lavado2}
+                onChange={e=>{setLavado2(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
+            </div>
+            <div>
+              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>👨‍👩‍👦 3 personas</div>
+              <input type="number" min={0} value={lavado3}
+                onChange={e=>{setLavado3(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
+            </div>
+          </div>
+        </div>
         <div style={{marginTop:10,fontSize:12,color:C.textSec,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
-          Cuenta: <strong style={{color:C.text}}>{limpHoras}h × {fARS(limpCostoHora)}</strong> + <strong style={{color:C.text}}>{fARS(lavadoCosto)}</strong> lavado = <strong style={{color:C.red}}>{fARS(costoPorLimpieza)}</strong> por limpieza · limpiás cada <strong style={{color:C.text}}>{limpCada} {limpCada===1?"noche":"noches"}</strong>.
-          <div style={{marginTop:6,color:C.blue}}>💡 Por eso <strong>{limpCada} noches</strong> suele ser el mínimo óptimo: una sola limpieza repartida en {limpCada} noches y el depto ya queda listo para el próximo. Por noche: {fARS(costoPorLimpieza)} (1n) · {fARS(Math.round(costoPorLimpieza/limpCadaN))} ({limpCadaN}n) · {fARS(Math.round(numLimpiezas(7)*costoPorLimpieza/7))} (7n).</div>
+          Cuenta: <strong style={{color:C.text}}>{limpHoras}h × {fARS(limpCostoHora)}</strong> = {fARS(Math.round(Number(limpHoras||0)*Number(limpCostoHora||0)))} de trabajo + el lavado según ocupación. La matriz aplica el lavado que corresponde a cada cantidad de personas. Limpiás cada <strong style={{color:C.text}}>{limpCada} {limpCada===1?"noche":"noches"}</strong>.
+          <div style={{marginTop:6,color:C.blue}}>💡 Por eso <strong>{limpCada} noches</strong> suele ser el mínimo óptimo: una sola limpieza repartida en {limpCada} noches y el depto ya queda listo para el próximo.</div>
         </div>
       </div>
 
@@ -1697,7 +1726,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
                       const comision    = Math.round(bruto * commPct / 100);
                       const comisionGestion = Math.round(bruto * Number(commGestion||0) / 100);
                       const netoComision= bruto - comision - comisionGestion;
-                      const costoLimp   = numLimpiezas(noches) * costoPorLimpieza; // 1 limpieza cada limpCada noches
+                      const costoLimp   = numLimpiezas(noches) * costoLimpieza(personas); // limpieza según ocupación, cada limpCada noches
                       const neto        = netoComision - costoLimp; // ganancia de la reserva (antes de gastos fijos)
                       const netoUSD     = arsToUsd(neto, tc);
                       const gastosUSD   = totalGastosUSD;
