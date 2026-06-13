@@ -2295,6 +2295,12 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
 function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues }) {
   const [showForm,setShowForm]=useState(false);
   const [selectedBooking,setSelectedBooking]=useState(null);
+  const [montoEdit,setMontoEdit]=useState("");
+  const [notaEdit,setNotaEdit]=useState("");
+  const [savingAjuste,setSavingAjuste]=useState(false);
+  useEffect(()=>{
+    if(selectedBooking){ setMontoEdit(String(selectedBooking.totalNetoARS||selectedBooking.totalARS||0)); setNotaEdit(selectedBooking.ajusteNota||""); }
+  },[selectedBooking]);
   const [year,setYear]=useState(new Date().getFullYear());
   const [month,setMonth]=useState(new Date().getMonth());
   const [saving,setSaving]=useState(false);
@@ -2707,6 +2713,41 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Ajustar monto antes de cobrar */}
+              <div style={{...S.card, marginBottom:16}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>✏️ Ajustar monto a cobrar</div>
+                <div style={{fontSize:11,color:C.textSec,marginBottom:10}}>Editá el neto si hubo extras o ajustes que la plataforma no tomó (limpieza extra, daños, late check-out…).</div>
+                <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                  <div style={{flex:"1 1 160px"}}>
+                    <label style={S.label}>Monto neto a cobrar (ARS)</label>
+                    <input type="number" style={S.input} value={montoEdit} onChange={e=>setMontoEdit(e.target.value)}/>
+                    <div style={{fontSize:11,color:C.green,marginTop:4,fontWeight:600}}>≈ {fUSD(arsToUsd(Number(montoEdit||0), selectedBooking.exchangeRateUsed||tc))}</div>
+                  </div>
+                  <div style={{flex:"2 1 200px"}}>
+                    <label style={S.label}>Nota del ajuste (opcional)</label>
+                    <input style={S.input} placeholder="Ej: +limpieza extra / −descuento" value={notaEdit} onChange={e=>setNotaEdit(e.target.value)}/>
+                  </div>
+                </div>
+                {Number(montoEdit||0)!==Number(selectedBooking.totalNetoARS||selectedBooking.totalARS||0)&&(
+                  <div style={{fontSize:11,color:C.yellow,marginTop:8,fontWeight:700}}>
+                    Cambio: {Number(montoEdit||0)>=Number(selectedBooking.totalNetoARS||selectedBooking.totalARS||0)?"+":""}{fARS(Number(montoEdit||0)-Number(selectedBooking.totalNetoARS||selectedBooking.totalARS||0))} respecto al original
+                  </div>
+                )}
+                <button disabled={savingAjuste} onClick={async()=>{
+                  setSavingAjuste(true);
+                  try{
+                    const nuevoNeto=Number(montoEdit||0);
+                    const rate=selectedBooking.exchangeRateUsed||tc;
+                    await updateDoc(doc(db,"re_bookings",selectedBooking.id),{ totalNetoARS:nuevoNeto, totalUSD:arsToUsd(nuevoNeto,rate), ajusteNota:notaEdit||"", ajustadoEn:new Date().toISOString() });
+                    await reload();
+                    setSelectedBooking(prev=>prev?{...prev, totalNetoARS:nuevoNeto, totalUSD:arsToUsd(nuevoNeto,rate), ajusteNota:notaEdit}:prev);
+                  }catch(e){ alert("Error al guardar: "+e.message); }
+                  finally{ setSavingAjuste(false); }
+                }} style={{...S.btnGreen, justifyContent:"center", marginTop:12, width:"100%"}}>
+                  {savingAjuste?"Guardando...":"💾 Guardar monto"}
+                </button>
               </div>
 
               {/* Notas */}
