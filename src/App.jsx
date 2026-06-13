@@ -332,9 +332,8 @@ export default function App() {
       {/* ── TOP NAVIGATION BAR ───────────────────────────────────────── */}
       <header style={{
         position:"fixed", top:0, left:0, right:0, zIndex:100,
-        background:"#fff",
-        borderBottom:"1px solid "+C.border,
-        boxShadow:"0 2px 16px rgba(0,0,0,0.06)",
+        background:C.white,
+        boxShadow:"0 6px 18px "+C.nmDark,
         display:"flex", flexDirection:"column",
       }}>
         {/* Fila 1: Logo + TC + Usuario */}
@@ -719,12 +718,12 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                 background:"linear-gradient(135deg,#059669,#10b981)",
                 color:"#fff",border:"none",borderRadius:8,
                 padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",
-                boxShadow:"0 2px 8px rgba(5,150,105,0.3)",
+                boxShadow:C.shadow,
                 whiteSpace:"nowrap",
               }}>💰 Registrar cobro</button>
               <button onClick={()=>setShowGestion(true)} title="Ver, editar o borrar cobros" style={{
                 background:"#fff",
-                color:C.textSec,border:"1px solid "+C.border,borderRadius:8,
+                color:C.textSec,boxShadow:C.shadow,borderRadius:8,
                 padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",
                 whiteSpace:"nowrap",position:"relative",
               }}>⚙ Cobros{hayDuplicados&&<span style={{position:"absolute",top:-5,right:-5,width:10,height:10,borderRadius:"50%",background:C.red}}/>}</button>
@@ -747,7 +746,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
           </div>
 
           {/* Calendario de pagos */}
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,border:"1px solid "+C.border}}>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,boxShadow:C.shadowInset}}>
             <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Cobros {now.getFullYear()}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:4}}>
               {MESES.map((m,i)=>{
@@ -850,7 +849,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
           </div>
 
           {/* Reservas activas del mes */}
-          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,border:"1px solid "+C.border}}>
+          <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,boxShadow:C.shadowInset}}>
             <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Reservas este mes</div>
             {bookings.filter(b=>b.status==="confirmed"&&new Date(b.checkIn).getMonth()===now.getMonth()).length===0?(
               <div style={{fontSize:12,color:C.textMuted,textAlign:"center",padding:"8px 0"}}>Sin reservas confirmadas</div>
@@ -1092,13 +1091,13 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
                               background:C.green,color:"#fff",border:"none",borderRadius:7,padding:"6px 12px",fontSize:12,fontWeight:700,cursor:"pointer",
                             }}>{savingEdit?"...":"Guardar"}</button>
                             <button onClick={()=>{setEditId(null);setEditMonto("");}} style={{
-                              background:"#fff",color:C.textSec,border:"1px solid "+C.border,borderRadius:7,padding:"6px 12px",fontSize:12,cursor:"pointer",
+                              background:"#fff",color:C.textSec,boxShadow:C.shadow,borderRadius:7,padding:"6px 12px",fontSize:12,cursor:"pointer",
                             }}>Cancelar</button>
                           </>
                         ) : (
                           <>
                             <button onClick={()=>{setEditId(t.id);setEditMonto(String(t.amountARS||""));}} title="Editar monto" style={{
-                              background:"#fff",color:C.blue,border:"1px solid "+C.border,borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",
+                              background:"#fff",color:C.blue,boxShadow:C.shadow,borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",
                             }}>✏ Editar</button>
                             <button onClick={()=>borrarCobro(t.id)} title="Borrar cobro" style={{
                               background:"#fff",color:C.red,border:"1px solid "+C.red,borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer",
@@ -1280,7 +1279,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
           </h1>
           <p style={{color:C.textSec,fontSize:13,marginTop:6}}>Calculá tu precio ideal según gastos, ocupación y ganancia deseada</p>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:12,background:C.white,borderRadius:12,padding:"12px 16px",border:"1px solid "+C.border,boxShadow:C.shadow}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,background:C.white,borderRadius:12,padding:"12px 16px",boxShadow:C.shadow}}>
           <div>
             <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Mínimo de noches</div>
             <div style={{display:"flex",gap:6}}>
@@ -1518,7 +1517,7 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
           </div>
 
           {/* Totales */}
-          <div style={{background:C.bg,borderRadius:10,padding:12,border:"1px solid "+C.border,marginBottom:12}}>
+          <div style={{background:C.bg,borderRadius:10,padding:12,boxShadow:C.shadowInset,marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.3px"}}>Total gastos / mes</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:13,color:C.textSec}}>En pesos</span>
@@ -1915,17 +1914,17 @@ function EvaluacionPropiedad({ tc }) {
 
       {/* Resumen inversión */}
       <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
-        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+        <div style={{background:C.bg,borderRadius:12,padding:14,boxShadow:C.shadowInset}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>Inversión total</div>
           <div style={{fontSize:22,fontWeight:800,color:C.text}}>{fUSD(invTotal)}</div>
           <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>Cierre {fUSD(precioCierre)} + adq. {fUSD(gastosAdqUSD)} + amob. {fUSD(amoblamiento)}</div>
         </div>
-        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+        <div style={{background:C.bg,borderRadius:12,padding:14,boxShadow:C.shadowInset}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>NOI mensual</div>
           <div style={{fontSize:22,fontWeight:800,color:noiMes>0?C.green:C.red}}>{fUSD(noiMes)}</div>
           <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>{nochesOcup} noches · {fUSD(ingresoBrutoMes)} bruto</div>
         </div>
-        <div style={{background:C.bg,borderRadius:12,padding:14,border:"1px solid "+C.border}}>
+        <div style={{background:C.bg,borderRadius:12,padding:14,boxShadow:C.shadowInset}}>
           <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>NOI anual</div>
           <div style={{fontSize:22,fontWeight:800,color:noiAnual>0?C.green:C.red}}>{fUSD(noiAnual)}</div>
           <div style={{fontSize:11,color:C.textMuted,marginTop:4}}>{fARS(noiAnual*tc)} ARS/año</div>
@@ -2076,7 +2075,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
           <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Propiedades</h1>
           <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{properties.length} inmuebles · Cap Rate y Payback en tiempo real</p>
         </div>
-        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#1e3a6e,#2563eb)",boxShadow:"0 4px 14px rgba(37,99,235,0.3)"}}>
+        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#1e3a6e,#2563eb)",boxShadow:C.shadow}}>
           + Nueva propiedad
         </button>
       </div>
@@ -2121,14 +2120,14 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
                     <button onClick={()=>isEditing?saveEdit(p.id):startEdit(p)} style={{background:isEditing?C.greenLight:C.blueLight,border:"none",color:isEditing?C.green:C.blueMid,borderRadius:8,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>
                       {isEditing?"✓ Guardar":"✏ Editar"}
                     </button>
-                    {isEditing&&<button onClick={()=>setEditingId(null)} style={{background:C.bg,border:"1px solid "+C.border,borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:12,color:C.textSec}}>Cancelar</button>}
+                    {isEditing&&<button onClick={()=>setEditingId(null)} style={{background:C.bg,boxShadow:C.shadowInset,borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:12,color:C.textSec}}>Cancelar</button>}
                     {!isEditing&&<button onClick={()=>remove(p.id)} style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:28,height:28,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
                   </div>
                 </div>
 
                 {/* Valores editables */}
                 {isEditing?(
-                  <div style={{background:C.bg,borderRadius:12,padding:14,marginBottom:14,border:"1px solid "+C.border}}>
+                  <div style={{background:C.bg,borderRadius:12,padding:14,marginBottom:14,boxShadow:C.shadowInset}}>
                     <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:12}}>Editando valores</div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                       {[
@@ -2584,7 +2583,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
               ):(
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {bookings.filter(b=>b.status==="confirmed").sort((a,b)=>a.checkIn.localeCompare(b.checkIn)).map(b=>(
-                    <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",border:"1px solid "+C.border,cursor:"pointer",transition:"box-shadow 0.15s"}}
+                    <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",boxShadow:C.shadowInset,cursor:"pointer",transition:"box-shadow 0.15s"}}
                       onClick={()=>setSelectedBooking(b)}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
                         <div style={{flex:1}}>
@@ -2615,7 +2614,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
       {/* ── MODAL DETALLE RESERVA ────────────────────────────────────────── */}
       {selectedBooking&&(
         <div onClick={()=>setSelectedBooking(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",backdropFilter:"blur(6px)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"12px",overflowY:"auto"}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:C.white,borderRadius:20,width:"100%",maxWidth:560,boxShadow:"0 24px 60px rgba(0,0,0,0.25)",overflow:"hidden",marginTop:20,marginBottom:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.white,borderRadius:20,width:"100%",maxWidth:560,boxShadow:C.shadowMd,overflow:"hidden",marginTop:20,marginBottom:20}}>
             {/* Header */}
             <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -2896,7 +2895,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
             background:C.white,borderRadius:20,
             width:"100%",maxWidth:900,
             maxHeight:"95vh",overflowY:"auto",
-            boxShadow:"0 24px 60px rgba(0,0,0,0.25)",
+            boxShadow:C.shadowMd,
           }}>
             {/* Header azul */}
             <div style={{
@@ -3004,7 +3003,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                 <div style={{fontSize:11,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:"1px"}}>Elegí el precio</div>
 
                 {nights===0?(
-                  <div style={{background:C.white,borderRadius:12,padding:"30px",textAlign:"center",border:"1px solid "+C.border,color:C.textMuted,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <div style={{background:C.white,borderRadius:12,padding:"30px",textAlign:"center",boxShadow:C.shadow,color:C.textMuted,flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
                     <div style={{fontSize:32}}>📅</div>
                     <div style={{fontSize:13}}>Seleccioná las fechas para ver opciones de precio</div>
                   </div>
@@ -3018,7 +3017,7 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
                       </div>
                     )}
                     {/* Resumen noches + personas */}
-                    <div style={{background:C.white,borderRadius:10,padding:"10px 14px",border:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{background:C.white,borderRadius:10,padding:"10px 14px",boxShadow:C.shadow,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:13,fontWeight:600}}>{nights}n · {form.personas} {form.personas===1?"persona":"personas"}</span>
                       <span style={{fontSize:11,background:belowMin?C.yellowLight:C.greenLight,color:belowMin?C.yellow:C.green,padding:"3px 8px",borderRadius:20,fontWeight:600}}>{belowMin?"⚠ Bajo mín.":"✓ OK"}</span>
                     </div>
@@ -3202,7 +3201,7 @@ function Movimientos({ db }) {
               <div style={{ textAlign:"right" }}>
                 <div style={{ fontSize:13, fontWeight:700, color:C.red }}>{fUSD(m.totalUSD || 0)}</div>
                 <button onClick={() => deleteMovimiento(m.id)}
-                  style={{ marginTop:6, background:"none", border:"1px solid "+C.border, color:C.textMuted, borderRadius:6, padding:"3px 8px", fontSize:11, cursor:"pointer" }}>
+                  style={{ marginTop:6, background:"none", boxShadow:C.shadow, color:C.textMuted, borderRadius:6, padding:"3px 8px", fontSize:11, cursor:"pointer" }}>
                   Limpiar
                 </button>
               </div>
@@ -3266,7 +3265,7 @@ function Transactions({ properties, transactions, tc, reload, db }) {
           <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Transacciones</h1>
           <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{transactions.length} registros · ARS convertido a USD</p>
         </div>
-        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#059669,#10b981)",boxShadow:"0 4px 14px rgba(5,150,105,0.3)"}}>
+        <button onClick={()=>setShowForm(true)} style={{...S.btn,background:"linear-gradient(135deg,#059669,#10b981)",boxShadow:C.shadow}}>
           + Nueva transacción
         </button>
       </div>
@@ -4094,7 +4093,7 @@ function Accesos({ properties, bookings, tc, db }) {
             </div>
           </div>
           <button onClick={getLockStatus} disabled={loadingAction==="status"} style={{
-            width:"100%",padding:"8px 0",borderRadius:8,border:"1px solid "+C.border,
+            width:"100%",padding:"8px 0",borderRadius:8,boxShadow:C.shadow,
             background:C.bg,color:C.textSec,fontSize:12,fontWeight:600,cursor:"pointer",
           }}>
             {loadingAction==="status"?"Consultando...":"↻ Actualizar estado"}
@@ -4109,7 +4108,7 @@ function Accesos({ properties, bookings, tc, db }) {
               padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",
               background:"linear-gradient(135deg,#1e3a6e,#2563eb)",
               color:"#fff",fontSize:14,fontWeight:700,
-              boxShadow:"0 4px 12px rgba(37,99,235,0.3)",
+              boxShadow:C.shadow,
               opacity:loadingAction==="locking"?0.7:1,
             }}>
               {loadingAction==="locking"?"Cerrando...":"🔒 Cerrar puerta"}
@@ -4118,7 +4117,7 @@ function Accesos({ properties, bookings, tc, db }) {
               padding:"14px 0",borderRadius:10,border:"none",cursor:"pointer",
               background:"linear-gradient(135deg,#d97706,#f59e0b)",
               color:"#fff",fontSize:14,fontWeight:700,
-              boxShadow:"0 4px 12px rgba(217,119,6,0.3)",
+              boxShadow:C.shadow,
               opacity:loadingAction==="unlocking"?0.7:1,
             }}>
               {loadingAction==="unlocking"?"Abriendo...":"🔓 Abrir puerta"}
@@ -4194,7 +4193,7 @@ function Accesos({ properties, bookings, tc, db }) {
               {bookingsConPin.slice(0,5).map(b=>{
                 const pinExiste = pins.find(p=>p.nombre===b.guestName);
                 return (
-                  <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",border:"1px solid "+C.border}}>
+                  <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",boxShadow:C.shadowInset}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                       <div>
                         <div style={{fontSize:13,fontWeight:700}}>{b.guestName}</div>
@@ -4231,13 +4230,13 @@ function Accesos({ properties, bookings, tc, db }) {
           <div style={{fontSize:15,fontWeight:700,marginBottom:16}}>PINs activos ({pins.length})</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {pins.map(pin=>(
-              <div key={pin.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",background:C.bg,borderRadius:10,border:"1px solid "+C.border}}>
+              <div key={pin.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",background:C.bg,borderRadius:10,boxShadow:C.shadowInset}}>
                 <div style={{width:40,height:40,borderRadius:10,background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🔑</div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:14,fontWeight:600}}>{pin.nombre}</div>
                   <div style={{fontSize:11,color:C.textMuted}}>Válido: {pin.inicio} → {pin.fin}</div>
                 </div>
-                <div style={{textAlign:"center",padding:"6px 14px",background:C.white,borderRadius:8,border:"1px solid "+C.border}}>
+                <div style={{textAlign:"center",padding:"6px 14px",background:C.white,borderRadius:8,boxShadow:C.shadow}}>
                   <div style={{fontSize:20,fontWeight:900,color:C.blue,letterSpacing:"3px"}}>{pin.codigo}</div>
                   <div style={{fontSize:9,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.5px"}}>Código PIN</div>
                 </div>
