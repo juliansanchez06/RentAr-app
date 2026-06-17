@@ -466,7 +466,7 @@ export default function App() {
             <div style={{ color:C.textSec, fontSize:14 }}>Cargando datos...</div>
           </div>
         ) : page==="dashboard"    ? <Dashboard    {...shared}/>
-          : page==="equilibrio"   ? <Equilibrio   tc={tc} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
+          : page==="equilibrio"   ? <Equilibrio   tc={tc} properties={properties} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
@@ -544,8 +544,12 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   const [savingEdit,setSavingEdit] = useState(false);
   const now = new Date();
 
-  const d1 = properties.find(p=>p.type==="fixed_rental"||p.type==="fija");
-  const d2 = properties.find(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
+  const fixedProps = properties.filter(p=>p.type==="fixed_rental"||p.type==="fija");
+  const tempProps  = properties.filter(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
+  const [selFixedId,setSelFixedId] = useState(fixedProps[0]?.id||"");
+  const [selTempId,setSelTempId]   = useState(tempProps[0]?.id||"");
+  const d1 = fixedProps.find(p=>p.id===selFixedId) || fixedProps[0];
+  const d2 = tempProps.find(p=>p.id===selTempId)   || tempProps[0];
 
   const txInc1 = transactions.filter(t=>t.propertyId===d1?.id&&t.type==="income").reduce((s,t)=>s+t.amountARS,0)/3;
   const inc1ARS = d1 ? (d1.monthlyIncomeARS||txInc1||476670) : 476670;
@@ -700,7 +704,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
       {/* KPIs */}
       <div className="grid-4" style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
         {[
-          {label:"Valor del portfolio",value:fUSD(totalVal),sub:`${properties.length} propiedades`,accent:C.text},
+          {label:"Valor del portfolio",value:fUSD(properties.reduce((s,p)=>s+(p.estimatedValueUSD||0),0)||totalVal),sub:`${properties.length} propiedades`,accent:C.text},
           {label:"Ingreso neto / mes", value:fUSD(ingresoNetoMesUSD),sub:`cobrado · bruto ${fUSD(ingresoBrutoMesUSD)}`,accent:C.green},
           {label:"Rentabilidad neta",  value:fPct(netYield),sub:"anual en USD",accent:netYield>4?C.green:C.yellow},
           {label:"TIR estimada",       value:fPct(irr),     sub:"proyección 20 años",accent:irr>6?C.green:irr>3?C.yellow:C.red},
@@ -719,7 +723,14 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         <div style={{...S.card,borderTop:"3px solid "+C.green}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
             <div>
-              <div style={{fontSize:15,fontWeight:700}}>{d1?.name||"Depto 1 · Renta Fija"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <div style={{fontSize:15,fontWeight:700}}>{d1?.name||"Depto 1 · Renta Fija"}</div>
+                {fixedProps.length>1&&(
+                  <select value={selFixedId} onChange={e=>setSelFixedId(e.target.value)} style={{...S.input,width:"auto",fontSize:12,padding:"4px 8px"}}>
+                    {fixedProps.map(pp=><option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                  </select>
+                )}
+              </div>
               <div style={{fontSize:12,color:C.textSec,marginTop:2}}>1 dorm · 2 ambientes grandes · Sin gastos</div>
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -828,7 +839,14 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
         <div style={{...S.card,borderTop:"3px solid "+C.yellow}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
             <div>
-              <div style={{fontSize:15,fontWeight:700}}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <div style={{fontSize:15,fontWeight:700}}>{d2?.name||"Depto 2 · Renta Temporal"}</div>
+                {tempProps.length>1&&(
+                  <select value={selTempId} onChange={e=>setSelTempId(e.target.value)} style={{...S.input,width:"auto",fontSize:12,padding:"4px 8px"}}>
+                    {tempProps.map(pp=><option key={pp.id} value={pp.id}>{pp.name}</option>)}
+                  </select>
+                )}
+              </div>
               <div style={{fontSize:12,color:C.textSec,marginTop:2}}>1 dorm · 2 ambientes chicos</div>
             </div>
             <span style={{fontSize:11,background:C.yellowLight,color:C.yellow,padding:"3px 10px",borderRadius:20,fontWeight:600}}>Por día</span>
@@ -1131,7 +1149,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
-function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
+function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues, db }) {
   const defaultGastos = [
     { id:1, nombre:"Internet",             monto:15000 },
     { id:2, nombre:"Expensas",             monto:45000 },
@@ -1149,6 +1167,12 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
     } catch(e) {}
     return defaultGastos;
   }
+
+  // Multi-depto: cada depto temporal tiene su propia config
+  const tempPropsEq = properties.filter(p=>p.type==="short_term"||p.type==="short-term"||p.type==="temporal");
+  const eqPropList  = tempPropsEq.length ? tempPropsEq : [{id:"_eq", name:"Depto temporal"}];
+  const [selectedEqProp,setSelectedEqProp] = useState(eqPropList[0]?.id);
+  const isPrimaryEq = selectedEqProp===eqPropList[0]?.id;
 
   const [gastos,setGastos]             = useState(()=>parseGastos(pinnedValues));
   const [nuevoNombre,setNuevoNombre]   = useState("");
@@ -1171,6 +1195,36 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
   const [lavado2,setLavado2]           = useState(pinnedValues?.lavado2 ?? (pinnedValues?.lavadoCosto||14000)); // matrimonio (1 cama doble)
   const [lavado3,setLavado3]           = useState(pinnedValues?.lavado3 ?? 20000);   // 3 personas (camas extra)
   const [limpCada,setLimpCada]         = useState(pinnedValues?.limpCada||3);
+
+  // Cargar la config del depto seleccionado (doc propio; fallback a la config global para el depto principal)
+  useEffect(()=>{
+    let cancel=false;
+    (async()=>{
+      let cfg=null;
+      try{ const snap=await getDoc(doc(db,"re_config","eq_"+selectedEqProp)); if(snap.exists()) cfg=snap.data(); }catch(e){}
+      if(!cfg) cfg = isPrimaryEq ? (pinnedValues||{}) : {};
+      if(cancel) return;
+      setGastos(parseGastos(cfg));
+      setTargetGanancia(cfg.targetGanancia||200);
+      setCommAirbnb(cfg.commAirbnb||15);
+      setCommBooking(cfg.commBooking||15);
+      setPlatform(cfg.platform||"direct");
+      setMinNights(cfg.minNights||2);
+      setTarifaBase(cfg.tarifaBase||70000);
+      setDesc2Pers(cfg.desc2Pers||10);
+      setDesc1Pers(cfg.desc1Pers||20);
+      setCommGestion(cfg.commGestion||0);
+      setLimpHoras(cfg.limpHoras??1.5);
+      setLimpCostoHora(cfg.limpCostoHora||8000);
+      setLavado1(cfg.lavado1??10000);
+      setLavado2(cfg.lavado2 ?? (cfg.lavadoCosto||14000));
+      setLavado3(cfg.lavado3??20000);
+      setLimpCada(cfg.limpCada||3);
+      setGastosSaved(false);
+    })();
+    return ()=>{cancel=true;};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[selectedEqProp]);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
   const commTotal = commPct + Number(commGestion||0); // plataforma + gestión del depto (ambas sobre el bruto)
@@ -1208,9 +1262,8 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
       }));
       const gastosStr = JSON.stringify(cleanGastos);
 
-      // Write directly to Firestore
-      const docRef = doc(db, "re_config", "pinned");
-      await setDoc(docRef, {
+      // Guardar la config de ESTE depto en su propio documento
+      const cfgObj = {
         gastos: gastosStr,
         targetGanancia: Number(targetGanancia),
         commAirbnb: Number(commAirbnb),
@@ -1228,27 +1281,13 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
         lavadoCosto: Number(lavado2),
         limpCada: Number(limpCada),
         platform: String(platform),
-      }, { merge: true });
-      // Mantener pinnedValues global en sincronía para que un pin posterior no pise estos valores
-      setPinnedValues && setPinnedValues(prev=>({ ...prev,
-        gastos: gastosStr,
-        targetGanancia: Number(targetGanancia),
-        commAirbnb: Number(commAirbnb),
-        commBooking: Number(commBooking),
-        minNights: Number(minNights),
-        tarifaBase: Number(tarifaBase),
-        desc2Pers: Number(desc2Pers),
-        desc1Pers: Number(desc1Pers),
-        commGestion: Number(commGestion),
-        limpHoras: Number(limpHoras),
-        limpCostoHora: Number(limpCostoHora),
-        lavado1: Number(lavado1),
-        lavado2: Number(lavado2),
-        lavado3: Number(lavado3),
-        lavadoCosto: Number(lavado2),
-        limpCada: Number(limpCada),
-        platform: String(platform),
-      }));
+      };
+      await setDoc(doc(db, "re_config", "eq_"+selectedEqProp), cfgObj, { merge: true });
+      // El depto principal también se refleja en la config global (el Dashboard usa esos valores)
+      if (isPrimaryEq) {
+        await setDoc(doc(db, "re_config", "pinned"), cfgObj, { merge: true });
+        setPinnedValues && setPinnedValues(prev=>({ ...prev, ...cfgObj }));
+      }
 
       setSaveMsg("✅ Guardado! "+cleanGastos.length+" gastos");
       setGastosSaved(true);
@@ -1293,9 +1332,23 @@ function Equilibrio({ tc, pinnedValues, pinValue, setPinnedValues, db }) {
 
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
+      {eqPropList.length>1 && (
+        <div style={{...S.card, marginBottom:16, padding:"10px 14px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+          <span style={{fontSize:12,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px"}}>Depto:</span>
+          {eqPropList.map(pp=>{
+            const sel=pp.id===selectedEqProp;
+            return (
+              <button key={pp.id} onClick={()=>setSelectedEqProp(pp.id)} style={{
+                padding:"7px 14px",borderRadius:10,border:"none",cursor:"pointer",fontSize:13,fontWeight:700,
+                boxShadow: sel?C.shadowInset:C.shadow, background: sel?C.bg:C.white, color: sel?C.blue:C.textSec,
+              }}>{pp.name||"Depto"}</button>
+            );
+          })}
+        </div>
+      )}
       <div style={{marginBottom:24,display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
         <div>
-          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>⚖ Rentabilidad · Depto 2</div>
+          <div style={{fontSize:11,fontWeight:700,color:C.green,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>⚖ Rentabilidad · {eqPropList.find(p=>p.id===selectedEqProp)?.name||"Depto temporal"}</div>
           <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>
             ¿A cuánto alquilar <span style={{color:C.blue}}>por noche</span>?
           </h1>
