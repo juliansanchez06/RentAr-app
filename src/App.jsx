@@ -4263,7 +4263,7 @@ function Accesos({ properties, bookings, tc, db }) {
   }
 
   // Auto-generate pins for upcoming bookings
-  const bookingsConPin = bookings.filter(b=>b.status==="confirmed");
+  const bookingsConPin = bookings.filter(b=>b.status==="confirmed" && (!b.propertyId || b.propertyId===selectedPropId));
 
   const STATUS_COLOR = {
     locked:   { bg:"#dcfce7", color:"#16a34a", icon:"🔒", label:"Cerrada" },
@@ -4409,6 +4409,20 @@ function Accesos({ properties, bookings, tc, db }) {
                 ))}
               </div>
             </div>
+            {rol==="huesped"&&(
+              <div>
+                <label style={S.label}>Asignar a una reserva</label>
+                <select style={S.input} value={newPin._bid||""} onChange={e=>{
+                  const b=bookingsConPin.find(x=>x.id===e.target.value);
+                  if(b){ setNewPin(p=>({...p,_bid:b.id,nombre:b.guestName||"",fechaInicio:(b.checkIn||"")+"T14:00",fechaFin:(b.checkOut||"")+"T11:00"})); }
+                  else { setNewPin(p=>({...p,_bid:""})); }
+                }}>
+                  <option value="">— Elegí una reserva (autocompleta nombre y fechas) —</option>
+                  {bookingsConPin.map(b=>(<option key={b.id} value={b.id}>{b.guestName} · {b.checkIn} → {b.checkOut}</option>))}
+                </select>
+                {bookingsConPin.length===0&&<div style={{fontSize:11,color:C.textMuted,marginTop:4}}>No hay reservas confirmadas para este depto. Cargalas en Reservas.</div>}
+              </div>
+            )}
             <div>
               <label style={S.label}>Nombre / Huésped</label>
               <input style={S.input} placeholder="Ej: Martín García" value={newPin.nombre} onChange={e=>setNewPin(p=>({...p,nombre:e.target.value}))}/>
@@ -4430,7 +4444,7 @@ function Accesos({ properties, bookings, tc, db }) {
             <button onClick={async()=>{
               if (!newPin.nombre||!newPin.fechaInicio||!newPin.fechaFin){alert("Completá nombre y fechas");return;}
               const pin = await createPin(newPin.nombre,newPin.fechaInicio,newPin.fechaFin,newPin.codigo,rol);
-              if (pin) setNewPin({nombre:"",fechaInicio:"",fechaFin:"",codigo:""});
+              if (pin) setNewPin({nombre:"",fechaInicio:"",fechaFin:"",codigo:"",_bid:""});
             }} disabled={loadingAction==="pin"} style={{...S.btnGreen,justifyContent:"center"}}>
               {loadingAction==="pin"?"Creando...":"🔑 Crear PIN"}
             </button>
