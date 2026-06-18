@@ -4119,7 +4119,8 @@ function Accesos({ properties, bookings, tc, db }) {
   }
 
   // TTLock API base
-  const TTLOCK_API = "https://euapi.ttlock.com/v3";
+  const TTLOCK_HOST = "https://euapi.ttlock.com";
+  const TTLOCK_API = TTLOCK_HOST + "/v3";
 
   async function getToken() {
     if (token) return token;
@@ -4130,7 +4131,7 @@ function Accesos({ properties, bookings, tc, db }) {
       password:     md5(config.password), // TTLock requires MD5 password
       grant_type:   "password",
     });
-    const res = await fetch(`${TTLOCK_API}/oauth2/token`, {
+    const res = await fetch(`${TTLOCK_HOST}/oauth2/token`, {
       method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
       body: params,
     });
@@ -4144,7 +4145,7 @@ function Accesos({ properties, bookings, tc, db }) {
     setLoadingAction("locks");
     try{
       const params=new URLSearchParams({ clientId:config.clientId, clientSecret:config.clientSecret, username:config.username, password:md5(config.password), grant_type:"password" });
-      const tr=await fetch(`${TTLOCK_API}/oauth2/token`,{ method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:params });
+      const tr=await fetch(`${TTLOCK_HOST}/oauth2/token`,{ method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:params });
       const td=await tr.json();
       if(!td.access_token) throw new Error(td.errmsg||"No se pudo autenticar (revisá email/contraseña/credenciales)");
       setToken(td.access_token);
