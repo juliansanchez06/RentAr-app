@@ -4186,6 +4186,10 @@ function Accesos({ properties, bookings, tc, db }) {
       if (data.errcode===0) {
         setLockStatus(open?"unlocked":"locked");
         addLog(open?"🔓 Puerta abierta remotamente":"🔒 Puerta cerrada remotamente");
+      } else {
+        const msg = data.errmsg || data.__proxyError || ("error "+data.errcode);
+        addLog("⚠ "+(open?"Abrir":"Cerrar")+": "+msg);
+        alert((open?"No se pudo abrir":"No se pudo cerrar")+": "+msg+(open?"":"\n\nNota: muchas cerraduras permiten ABRIR en remoto pero NO cerrar (se cierran solas o a mano). Probá 'Abrir puerta'."));
       }
     } catch(e) { alert("Error: "+e.message); }
     finally { setLoadingAction(""); }
