@@ -4094,6 +4094,7 @@ function Accesos({ properties, bookings, tc, db }) {
   const [loadingAction, setLoadingAction] = useState("");
   const [savedConfig, setSavedConfig]     = useState(false);
   const [token, setToken]                 = useState("");
+  const [lockOptions, setLockOptions]     = useState([]);
 
   // Cargar config + PINs de la propiedad seleccionada
   useEffect(()=>{
@@ -4136,6 +4137,25 @@ function Accesos({ properties, bookings, tc, db }) {
     const data = await res.json();
     if (data.access_token) { setToken(data.access_token); return data.access_token; }
     throw new Error("No se pudo obtener token: " + (data.errmsg||"error desconocido"));
+  }
+
+  async function buscarCerraduras(){
+    if(!config.clientId||!config.clientSecret||!config.username||!config.password){ alert("Completá Client ID, Client Secret, email y contraseña primero."); return; }
+    setLoadingAction("locks");
+    try{
+      const params=new URLSearchParams({ clientId:config.clientId, clientSecret:config.clientSecret, username:config.username, password:md5(config.password), grant_type:"password" });
+      const tr=await fetch(`${TTLOCK_API}/oauth2/token`,{ method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:params });
+      const td=await tr.json();
+      if(!td.access_token) throw new Error(td.errmsg||"No se pudo autenticar (revisá email/contraseña/credenciales)");
+      setToken(td.access_token);
+      const res=await fetch(`${TTLOCK_API}/lock/list?clientId=${config.clientId}&accessToken=${td.access_token}&pageNo=1&pageSize=100&date=${Date.now()}`);
+      const data=await res.json();
+      if(data.errcode&&data.errcode!==0) throw new Error(data.errmsg||("error "+data.errcode));
+      const list=data.list||[];
+      setLockOptions(list);
+      if(!list.length) alert("No se encontraron cerraduras en esta cuenta TTLock.");
+    }catch(e){ alert("Error al buscar cerraduras: "+e.message); }
+    finally{ setLoadingAction(""); }
   }
 
   async function getLockStatus() {
@@ -4608,6 +4628,27 @@ function Accesos({ properties, bookings, tc, db }) {
                     value={config[field]} onChange={e=>setConfig(c=>({...c,[field]:e.target.value}))}/>
                 </div>
               ))}
+              <div>
+                <button onClick={buscarCerraduras} disabled={loadingAction==="locks"} style={{...S.btnSec, width:"100%", justifyContent:"center"}}>
+                  {loadingAction==="locks"?"Buscando...":"🔎 Buscar mis cerraduras"}
+                </button>
+                {lockOptions.length>0&&(
+                  <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+                    <div style={{fontSize:11,color:C.textMuted,fontWeight:600}}>Elegí tu cerradura (carga el Lock ID solo):</div>
+                    {lockOptions.map(l=>{
+                      const sel=String(config.lockId)===String(l.lockId);
+                      return (
+                        <button key={l.lockId} onClick={()=>setConfig(c=>({...c,lockId:String(l.lockId)}))} style={{
+                          textAlign:"left",padding:"8px 12px",borderRadius:10,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,
+                          boxShadow: sel?C.shadowInset:C.shadow, background: sel?C.bg:C.white, color: sel?C.blue:C.text,
+                        }}>
+                          {sel?"✓ ":""}{l.lockAlias||l.lockName||("Cerradura "+l.lockId)} <span style={{fontSize:10,color:C.textMuted}}>· ID {l.lockId}{l.electricQuantity!=null?` · 🔋${l.electricQuantity}%`:""}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <div style={{display:"flex",gap:10,marginTop:8}}>
                 <button onClick={saveConfig} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>
                   {savedConfig?"✓ Guardado":"Guardar configuración"}
