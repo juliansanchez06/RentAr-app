@@ -4122,20 +4122,24 @@ function Accesos({ properties, bookings, tc, db }) {
   const TTLOCK_HOST = "https://euapi.ttlock.com";
   const TTLOCK_API = TTLOCK_HOST + "/v3";
 
+  // Todas las llamadas a TTLock pasan por nuestro proxy (/api/ttlock) para evitar CORS
+  async function ttFetch(path, method, params){
+    const res = await fetch("/api/ttlock", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ path, method, params }),
+    });
+    let data; try{ data = await res.json(); }catch(e){ throw new Error("Respuesta inválida del proxy"); }
+    if (data && data.__proxyError) throw new Error(data.__proxyError);
+    return data;
+  }
+
   async function getToken() {
     if (token) return token;
-    const params = new URLSearchParams({
-      clientId:     config.clientId,
-      clientSecret: config.clientSecret,
-      username:     config.username,
-      password:     md5(config.password), // TTLock requires MD5 password
-      grant_type:   "password",
+    const data = await ttFetch("/oauth2/token", "POST", {
+      clientId: config.clientId, clientSecret: config.clientSecret,
+      username: config.username, password: md5(config.password), grant_type: "password",
     });
-    const res = await fetch(`${TTLOCK_HOST}/oauth2/token`, {
-      method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"},
-      body: params,
-    });
-    const data = await res.json();
     if (data.access_token) { setToken(data.access_token); return data.access_token; }
     throw new Error("No se pudo obtener token: " + (data.errmsg||"error desconocido"));
   }
@@ -4144,13 +4148,10 @@ function Accesos({ properties, bookings, tc, db }) {
     if(!config.clientId||!config.clientSecret||!config.username||!config.password){ alert("Completá Client ID, Client Secret, email y contraseña primero."); return; }
     setLoadingAction("locks");
     try{
-      const params=new URLSearchParams({ clientId:config.clientId, clientSecret:config.clientSecret, username:config.username, password:md5(config.password), grant_type:"password" });
-      const tr=await fetch(`${TTLOCK_HOST}/oauth2/token`,{ method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:params });
-      const td=await tr.json();
+      const td = await ttFetch("/oauth2/token","POST",{ clientId:config.clientId, clientSecret:config.clientSecret, username:config.username, password:md5(config.password), grant_type:"password" });
       if(!td.access_token) throw new Error(td.errmsg||"No se pudo autenticar (revisá email/contraseña/credenciales)");
       setToken(td.access_token);
-      const res=await fetch(`${TTLOCK_API}/lock/list?clientId=${config.clientId}&accessToken=${td.access_token}&pageNo=1&pageSize=100&date=${Date.now()}`);
-      const data=await res.json();
+      const data = await ttFetch("/v3/lock/list","GET",{ clientId:config.clientId, accessToken:td.access_token, pageNo:1, pageSize:100, date:Date.now() });
       if(data.errcode&&data.errcode!==0) throw new Error(data.errmsg||("error "+data.errcode));
       const list=data.list||[];
       setLockOptions(list);
@@ -4164,8 +4165,7 @@ function Accesos({ properties, bookings, tc, db }) {
     try {
       if (!connected) { setLockStatus("demo"); setBattery(85); return; }
       const t = await getToken();
-      const res = await fetch(`${TTLOCK_API}/lock/queryOpenState?clientId=${config.clientId}&accessToken=${t}&lockId=${config.lockId}&date=${Date.now()}`);
-      const data = await res.json();
+      const data = await ttFetch("/v3/lock/queryOpenState","GET",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() });
       setLockStatus(data.state === 0 ? "locked" : "unlocked");
     } catch(e) {
       setLockStatus("demo");
@@ -4182,13 +4182,7 @@ function Accesos({ properties, bookings, tc, db }) {
         return;
       }
       const t = await getToken();
-      const endpoint = open ? "lock/unlock" : "lock/lock";
-      const res = await fetch(`${TTLOCK_API}/${endpoint}`, {
-        method:"POST",
-        headers:{"Content-Type":"application/x-www-form-urlencoded"},
-        body: new URLSearchParams({ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() }),
-      });
-      const data = await res.json();
+      const data = await ttFetch("/v3/"+(open?"lock/unlock":"lock/lock"),"POST",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() });
       if (data.errcode===0) {
         setLockStatus(open?"unlocked":"locked");
         addLog(open?"🔓 Puerta abierta remotamente":"🔒 Puerta cerrada remotamente");
@@ -4206,16 +4200,10 @@ function Accesos({ properties, bookings, tc, db }) {
 
       if (connected) {
         const t = await getToken();
-        const res = await fetch(`${TTLOCK_API}/keyboardPwd/add`, {
-          method:"POST",
-          headers:{"Content-Type":"application/x-www-form-urlencoded"},
-          body: new URLSearchParams({
-            clientId:config.clientId, accessToken:t, lockId:config.lockId,
-            keyboardPwd:pinCode, keyboardPwdName:nombre,
-            startDate, endDate, date:Date.now(),
-          }),
+        const data = await ttFetch("/v3/keyboardPwd/add","POST",{
+          clientId:config.clientId, accessToken:t, lockId:config.lockId,
+          keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, date:Date.now(),
         });
-        const data = await res.json();
         if (data.errcode!==0) throw new Error(data.errmsg);
       }
 
@@ -4249,8 +4237,7 @@ function Accesos({ properties, bookings, tc, db }) {
     try {
       if(!connected){ setRecords([]); addLog("ℹ Conectá la cerradura + gateway para ver accesos reales"); return; }
       const t = await getToken();
-      const res = await fetch(`${TTLOCK_API}/lockRecord/list?clientId=${config.clientId}&accessToken=${t}&lockId=${config.lockId}&pageNo=1&pageSize=50&date=${Date.now()}`);
-      const data = await res.json();
+      const data = await ttFetch("/v3/lockRecord/list","GET",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, pageNo:1, pageSize:50, date:Date.now() });
       const list = (data.list||[]).map((r,idx)=>({
         id: r.recordId || (r.lockDate+"_"+idx),
         fecha: r.lockDate ? new Date(r.lockDate).toLocaleString("es-AR") : "—",
