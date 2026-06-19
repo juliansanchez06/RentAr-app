@@ -4232,6 +4232,7 @@ function Accesos({ properties, bookings, tc, db }) {
       const startDate = new Date(inicio).getTime();
       const endDate   = new Date(fin).getTime();
 
+      let kpwdId = null;
       if (connected) {
         const t = await getToken();
         const data = await ttFetch("/v3/keyboardPwd/add","POST",{
@@ -4239,10 +4240,11 @@ function Accesos({ properties, bookings, tc, db }) {
           keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, addType:2, date:Date.now(),
         });
         if (data.errcode!==0 && !data.keyboardPwdId) throw new Error(data.errmsg || data.__proxyError || ("error "+data.errcode));
+        kpwdId = data.keyboardPwdId || null;
       }
 
       const newEntry = {
-        id:Date.now(), nombre, codigo:pinCode,
+        id:Date.now(), nombre, codigo:pinCode, keyboardPwdId:kpwdId,
         inicio, fin, activo:true, rol:rolTipo,
         creadoEn:new Date().toLocaleString("es-AR"),
       };
@@ -4256,7 +4258,25 @@ function Accesos({ properties, bookings, tc, db }) {
   }
 
   async function deletePin(pin) {
-    if (!confirm(`¿Eliminar PIN de ${pin.nombre}?`)) return;
+    if (!confirm(`¿Eliminar PIN de ${pin.nombre}? Se borra también de la cerradura.`)) return;
+    if (connected) {
+      try {
+        const t = await getToken();
+        let kid = pin.keyboardPwdId;
+        if (!kid) {
+          // PIN viejo sin ID guardado: lo busco en la cerradura por código o nombre
+          const lst = await ttFetch("/v3/lock/listKeyboardPwd","GET",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, pageNo:1, pageSize:100, date:Date.now() });
+          const found = (lst.list||[]).find(k => String(k.keyboardPwd)===String(pin.codigo) || k.keyboardPwdName===pin.nombre);
+          kid = found && found.keyboardPwdId;
+        }
+        if (kid) {
+          const data = await ttFetch("/v3/keyboardPwd/delete","POST",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, keyboardPwdId:kid, deleteType:2, date:Date.now() });
+          if (data.errcode!==0) { alert("No se pudo borrar el código en la cerradura: "+(data.errmsg||data.__proxyError||("error "+data.errcode))); return; }
+        } else {
+          if(!confirm("No encontré ese código en la cerradura para borrarlo automático. ¿Lo quito igual de la lista? (Acordate de borrarlo a mano en la app TTLock)")) return;
+        }
+      } catch(e) { alert("Error al borrar en la cerradura: "+e.message); return; }
+    }
     setPins(p=>{ const next=p.filter(x=>x.id!==pin.id); persistPins(next); return next; });
     addLog(`🗑 PIN eliminado: ${pin.nombre}`);
   }
