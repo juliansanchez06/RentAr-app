@@ -4193,6 +4193,10 @@ function Accesos({ properties, bookings, tc, db }) {
       const t = await getToken();
       const data = await ttFetch("/v3/lock/queryOpenState","GET",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() });
       setLockStatus(data.state === 0 ? "locked" : "unlocked");
+      try {
+        const bat = await ttFetch("/v3/lock/queryElectricQuantity","GET",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, date:Date.now() });
+        if (bat && typeof bat.electricQuantity === "number") setBattery(bat.electricQuantity);
+      } catch(e) {}
     } catch(e) {
       setLockStatus("demo");
       setBattery(85);
@@ -4232,9 +4236,9 @@ function Accesos({ properties, bookings, tc, db }) {
         const t = await getToken();
         const data = await ttFetch("/v3/keyboardPwd/add","POST",{
           clientId:config.clientId, accessToken:t, lockId:config.lockId,
-          keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, date:Date.now(),
+          keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, addType:2, date:Date.now(),
         });
-        if (data.errcode!==0) throw new Error(data.errmsg);
+        if (data.errcode!==0 && !data.keyboardPwdId) throw new Error(data.errmsg || data.__proxyError || ("error "+data.errcode));
       }
 
       const newEntry = {
