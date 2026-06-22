@@ -3574,7 +3574,34 @@ function Transactions({ properties, transactions, tc, reload, db }) {
 }
 
 // ── ANÁLISIS ──────────────────────────────────────────────────────────────────
-function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
+// Gráfico de línea dual (recaudado en ARS + dólar MEP) en SVG, sin librerías
+function DualLineChart({ labels, recaudado, dolar }){
+  const W=560,H=240,padL=10,padR=10,padT=22,padB=30;
+  const n=labels.length, plotW=W-padL-padR, plotH=H-padT-padB;
+  const xx=i=> padL+(n<=1?0:i*plotW/(n-1));
+  const maxRec=Math.max(...recaudado.map(v=>v||0),1);
+  const dser=dolar||[];
+  const dvals=dser.filter(v=>v!=null);
+  const maxD=Math.max(...(dvals.length?dvals:[1]));
+  const minD=Math.min(...(dvals.length?dvals:[0]));
+  const yRec=v=> padT+plotH-((v||0)/maxRec)*plotH;
+  const yDol=v=>{ const sp=(maxD-minD)||1; return padT+plotH-((v-minD)/sp)*(plotH*0.86)-plotH*0.07; };
+  const ptsRec=recaudado.map((v,i)=>`${xx(i).toFixed(1)},${yRec(v).toFixed(1)}`).join(" ");
+  const ptsDol=dvals.length? dser.map((v,i)=> v==null?null:`${xx(i).toFixed(1)},${yDol(v).toFixed(1)}`).filter(Boolean).join(" ") : "";
+  const fmtK=v=> (v||0)>=1000? Math.round((v||0)/1000)+"k" : Math.round(v||0);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block"}}>
+      {[0,0.25,0.5,0.75,1].map((g,i)=>{ const y=padT+plotH-g*plotH; return <line key={i} x1={padL} y1={y} x2={W-padR} y2={y} stroke={C.border} strokeWidth="1"/>; })}
+      {ptsRec&&<polyline points={ptsRec} fill="none" stroke={C.green} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>}
+      {recaudado.map((v,i)=><circle key={"r"+i} cx={xx(i)} cy={yRec(v)} r="2.8" fill={C.green}><title>{labels[i]}: {fmtK(v)}</title></circle>)}
+      {ptsDol&&<polyline points={ptsDol} fill="none" stroke={C.blueMid} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>}
+      {ptsDol&&dser.map((v,i)=> v==null?null:<circle key={"d"+i} cx={xx(i)} cy={yDol(v)} r="2.8" fill={C.blueMid}><title>{labels[i]}: ${Math.round(v)}</title></circle>)}
+      {labels.map((l,i)=><text key={"x"+i} x={xx(i)} y={H-9} fontSize="9" fill={C.textMuted} textAnchor="middle">{l}</text>)}
+    </svg>
+  );
+}
+
+function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pinValue }) {
   const [propId,setPropId]       = useState("all");
   const [years,setYears]         = useState(pinnedValues?.projYears||20);
   const [tab,setTab]             = useState("flujo"); // flujo | escenarios | revalorizacion
@@ -3588,6 +3615,33 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
   // Revalorización
   const [aprecAnual,setAprecAnual] = useState(3);  // % anual de suba del inmueble en USD
   const [anosVenta,setAnosVenta]   = useState(10); // en cuántos años se vende
+
+  // ── Gráficos: recaudado mensual vs dólar ───────────────────────────────
+  const chartYear = new Date().getFullYear();
+  const MESES_CH = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const fixedIds = properties.filter(p=>p.type==="fixed_rental"||p.type==="fija").map(p=>p.id);
+  const recTemporal = Array(12).fill(0);
+  bookings.forEach(b=>{ if(b.cobrado && b.checkIn){ const d=new Date(b.checkIn); if(d.getFullYear()===chartYear) recTemporal[d.getMonth()]+=(b.totalNetoARS||b.totalARS||0); } });
+  const recMensual = Array(12).fill(0);
+  transactions.forEach(t=>{ if(t.type==="income" && t.date && t.date.startsWith(String(chartYear)) && (fixedIds.length===0 || fixedIds.includes(t.propertyId))){ const m=Number(t.date.slice(5,7))-1; if(m>=0&&m<12) recMensual[m]+=(t.amountARS||0); } });
+  const dolarOwn = Array(12).fill(null);
+  transactions.forEach(t=>{ if(t.date && t.date.startsWith(String(chartYear)) && t.exchangeRateUsed){ const m=Number(t.date.slice(5,7))-1; if(m>=0&&m<12) dolarOwn[m]=t.exchangeRateUsed; } });
+  bookings.forEach(b=>{ if(b.checkIn && b.exchangeRateUsed){ const d=new Date(b.checkIn); if(d.getFullYear()===chartYear) dolarOwn[d.getMonth()]=b.exchangeRateUsed; } });
+  { let lo=null; for(let i=0;i<12;i++){ if(dolarOwn[i]!=null) lo=dolarOwn[i]; else if(lo!=null) dolarOwn[i]=lo; } }
+  const [dolarSerie,setDolarSerie]=useState(null);
+  const [dolarMsg,setDolarMsg]=useState("");
+  async function cargarDolar(){
+    setDolarMsg("Cargando dólar...");
+    try{
+      const r=await fetch("/api/dolar?year="+chartYear);
+      const data=await r.json();
+      const bm = Array.isArray(data && data.meses) ? data.meses : null;
+      if(!bm || bm.every(v=>v==null)) throw new Error(data && data.__error ? data.__error : "sin datos");
+      setDolarSerie(bm); setDolarMsg("");
+    }catch(e){ setDolarSerie(null); setDolarMsg("No se pudo traer el dólar online — se usa el de tus cobros."); }
+  }
+  useEffect(()=>{ cargarDolar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },[]);
+  const dolarFinal = dolarSerie || dolarOwn;
 
   const props    = propId==="all" ? properties : properties.filter(p=>p.id===propId);
   const txs      = propId==="all" ? transactions : transactions.filter(t=>t.propertyId===propId);
@@ -3681,6 +3735,32 @@ function Analytics({ properties, transactions, tc, pinnedValues, pinValue }) {
             <label style={{fontSize:13,color:C.textSec}}>Años:</label>
             <input type="number" min={5} max={40} value={years} onChange={e=>setYears(Number(e.target.value))} style={{...S.input,width:65,textAlign:"center"}}/>
             <PinBtn pinKey="projYears" value={years} pinnedValues={pinnedValues} pinValue={pinValue}/>
+          </div>
+        </div>
+      </div>
+
+      {/* 📈 Recaudado vs Dólar */}
+      <div style={{...S.card, marginBottom:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:6}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700}}>📈 Recaudado vs Dólar · {chartYear}</div>
+            <div style={{fontSize:12,color:C.textSec}}>Lo cobrado por mes (ARS) y la evolución del dólar MEP</div>
+          </div>
+          <button onClick={cargarDolar} style={{...S.btnSec,fontSize:12}}>↻ Actualizar dólar</button>
+        </div>
+        <div style={{display:"flex",gap:16,marginBottom:6,flexWrap:"wrap"}}>
+          <span style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.textSec}}><span style={{width:12,height:3,background:C.green,borderRadius:2,display:"inline-block"}}/>Recaudado (ARS)</span>
+          <span style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.textSec}}><span style={{width:12,height:3,background:C.blueMid,borderRadius:2,display:"inline-block"}}/>Dólar MEP</span>
+        </div>
+        {dolarMsg&&<div style={{fontSize:11,color:C.textMuted,marginBottom:8}}>{dolarMsg}</div>}
+        <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          <div style={{background:C.bg,borderRadius:12,padding:"10px 12px",boxShadow:C.shadowInset}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>🏠 Temporal (por día)</div>
+            <DualLineChart labels={MESES_CH} recaudado={recTemporal} dolar={dolarFinal}/>
+          </div>
+          <div style={{background:C.bg,borderRadius:12,padding:"10px 12px",boxShadow:C.shadowInset}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>🔑 Mensual (renta fija)</div>
+            <DualLineChart labels={MESES_CH} recaudado={recMensual} dolar={dolarFinal}/>
           </div>
         </div>
       </div>
