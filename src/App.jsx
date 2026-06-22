@@ -2165,9 +2165,14 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
   }
 
   async function remove(id){
-    if(!confirm("¿Eliminar esta propiedad?"))return;
-    await deleteDoc(doc(db,"re_properties",id));
-    await reload();
+    if(!confirm("¿Eliminar esta propiedad? Esta acción no se puede deshacer."))return;
+    try {
+      await deleteDoc(doc(db,"re_properties",id));
+      await reload();
+    } catch(e) {
+      console.error("remove property error:", e);
+      alert("No se pudo eliminar la propiedad: "+(e?.message||e));
+    }
   }
 
   function startEdit(p) {
