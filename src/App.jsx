@@ -4228,19 +4228,23 @@ function Accesos({ properties, bookings, tc, db }) {
   async function createPin(nombre, inicio, fin, codigo, rolTipo="huesped") {
     setLoadingAction("pin");
     try {
-      const pinCode = codigo || String(Math.floor(100000+Math.random()*900000));
+      let pinCode = codigo || String(Math.floor(100000+Math.random()*900000));
       const startDate = new Date(inicio).getTime();
       const endDate   = new Date(fin).getTime();
 
       let kpwdId = null;
       if (connected) {
         const t = await getToken();
-        const data = await ttFetch("/v3/keyboardPwd/add","POST",{
+        // keyboardPwd/get genera un código OFFLINE: no requiere que la cerradura esté conectada al gateway
+        const data = await ttFetch("/v3/keyboardPwd/get","GET",{
           clientId:config.clientId, accessToken:t, lockId:config.lockId,
-          keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, addType:2, date:Date.now(),
+          keyboardPwdType:3, startDate, endDate, date:Date.now(),
         });
-        if (data.errcode!==0 && !data.keyboardPwdId) throw new Error(data.errmsg || data.__proxyError || ("error "+data.errcode));
-        kpwdId = data.keyboardPwdId || null;
+        if (!data.keyboardPwd) throw new Error(data.errmsg || data.__proxyError || ("error "+(data.errcode||"")));
+        pinCode = String(data.keyboardPwd);
+        kpwdId  = data.keyboardPwdId || null;
+        // ponerle el nombre (huésped/limpieza/etc.) al código en la cerradura
+        if (kpwdId) { try { await ttFetch("/v3/keyboardPwd/rename","POST",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, keyboardPwdId:kpwdId, keyboardPwdName:nombre, date:Date.now() }); } catch(e){} }
       }
 
       const newEntry = {
@@ -4500,7 +4504,7 @@ function Accesos({ properties, bookings, tc, db }) {
               </div>
             </div>
             <div>
-              <label style={S.label}>Código PIN (dejar vacío para generar automático)</label>
+              <label style={S.label}>Código PIN (lo genera la cerradura automáticamente)</label>
               <input style={S.input} placeholder="Ej: 485921" maxLength={6} value={newPin.codigo} onChange={e=>setNewPin(p=>({...p,codigo:e.target.value}))}/>
             </div>
             <button onClick={async()=>{
