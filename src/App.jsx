@@ -4320,16 +4320,13 @@ function Accesos({ properties, bookings, tc, db }) {
       let kpwdId = null;
       if (connected) {
         const t = await getToken();
-        // keyboardPwd/get genera un código OFFLINE: no requiere que la cerradura esté conectada al gateway
-        const data = await ttFetch("/v3/keyboardPwd/get","GET",{
+        // Se sube el código a la cerradura por el GATEWAY (addType=2): queda activo al instante. El gateway debe estar online junto a la cerradura.
+        const data = await ttFetch("/v3/keyboardPwd/add","POST",{
           clientId:config.clientId, accessToken:t, lockId:config.lockId,
-          keyboardPwdType:3, startDate, endDate, date:Date.now(),
+          keyboardPwd:pinCode, keyboardPwdName:nombre, startDate, endDate, addType:2, date:Date.now(),
         });
-        if (!data.keyboardPwd) throw new Error(data.errmsg || data.__proxyError || ("error "+(data.errcode||"")));
-        pinCode = String(data.keyboardPwd);
-        kpwdId  = data.keyboardPwdId || null;
-        // ponerle el nombre (huésped/limpieza/etc.) al código en la cerradura
-        if (kpwdId) { try { await ttFetch("/v3/keyboardPwd/rename","POST",{ clientId:config.clientId, accessToken:t, lockId:config.lockId, keyboardPwdId:kpwdId, keyboardPwdName:nombre, date:Date.now() }); } catch(e){} }
+        if (data.errcode!==0 && !data.keyboardPwdId) throw new Error(data.errmsg || data.__proxyError || ("error "+data.errcode));
+        kpwdId = data.keyboardPwdId || null;
       }
 
       const newEntry = {
@@ -4589,7 +4586,7 @@ function Accesos({ properties, bookings, tc, db }) {
               </div>
             </div>
             <div>
-              <label style={S.label}>Código PIN (lo genera la cerradura automáticamente)</label>
+              <label style={S.label}>Código PIN (dejar vacío para generar automático)</label>
               <input style={S.input} placeholder="Ej: 485921" maxLength={6} value={newPin.codigo} onChange={e=>setNewPin(p=>({...p,codigo:e.target.value}))}/>
             </div>
             <button onClick={async()=>{
