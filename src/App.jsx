@@ -637,6 +637,12 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   // Proyección = lo ya recaudado + los meses que faltan estimados al valor actual del alquiler
   const proyAnualARS   = recaudadoARS + mesesRestantes*inc1ARS;
   const proyAnualUSD   = recaudadoUSDfix + mesesRestantes*inc1USD;
+  // Total recaudado del año = renta fija + temporal cobrado (todas las propiedades)
+  const recTempAnio = bookings.filter(b=>b.cobrado && b.checkIn && new Date(b.checkIn).getFullYear()===now.getFullYear());
+  const recaudadoTemporalAnioARS = recTempAnio.reduce((s,b)=>s+(b.totalNetoARS||b.totalARS||0),0);
+  const recaudadoTemporalAnioUSD = recTempAnio.reduce((s,b)=>s+(b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)),0);
+  const recaudadoTotalAnioARS = recaudadoARS + recaudadoTemporalAnioARS;
+  const recaudadoTotalAnioUSD = recaudadoUSDfix + recaudadoTemporalAnioUSD;
 
   async function registrarCobro() {
     if (!d1?.id) { alert("Primero cargá el Depto 1 en Propiedades"); return; }
@@ -720,10 +726,17 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
             {" · "}TC <span style={{color:C.green,fontWeight:700}}>${tc.toLocaleString("es-AR")}</span>
           </p>
         </div>
-        <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
-          <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Recaudado {now.getFullYear()}</div>
-          <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fARS(recaudadoARS)}</div>
-          <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)} · {mesesUnicosCobrados.length} meses</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <div style={{background:"linear-gradient(135deg,#0f3d2e,#15803d)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Total recaudado {now.getFullYear()}</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fARS(recaudadoTotalAnioARS)}</div>
+            <div style={{fontSize:11,color:"#a7f3d0",fontWeight:600,marginTop:2}}>{fUSD(recaudadoTotalAnioUSD)} · todas las propiedades</div>
+          </div>
+          <div style={{background:"linear-gradient(135deg,#0f2156,#1e3a6e)",borderRadius:14,padding:"12px 20px",textAlign:"right"}}>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.6)",fontWeight:600,letterSpacing:"1px",textTransform:"uppercase"}}>Renta fija {now.getFullYear()}</div>
+            <div style={{fontSize:22,fontWeight:800,color:"#fff"}}>{fARS(recaudadoARS)}</div>
+            <div style={{fontSize:11,color:"#6ee7b7",fontWeight:600,marginTop:2}}>{fUSD(recaudadoUSDfix)} · {mesesUnicosCobrados.length} meses</div>
+          </div>
         </div>
       </div>
 
