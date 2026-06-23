@@ -637,12 +637,16 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
   // Proyección = lo ya recaudado + los meses que faltan estimados al valor actual del alquiler
   const proyAnualARS   = recaudadoARS + mesesRestantes*inc1ARS;
   const proyAnualUSD   = recaudadoUSDfix + mesesRestantes*inc1USD;
-  // Total recaudado del año = renta fija + temporal cobrado (todas las propiedades)
+  // Total recaudado del año = TODAS las propiedades fijas + temporal cobrado (independiente del selector de abajo)
   const recTempAnio = bookings.filter(b=>b.cobrado && b.checkIn && new Date(b.checkIn).getFullYear()===now.getFullYear());
   const recaudadoTemporalAnioARS = recTempAnio.reduce((s,b)=>s+(b.totalNetoARS||b.totalARS||0),0);
   const recaudadoTemporalAnioUSD = recTempAnio.reduce((s,b)=>s+(b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)),0);
-  const recaudadoTotalAnioARS = recaudadoARS + recaudadoTemporalAnioARS;
-  const recaudadoTotalAnioUSD = recaudadoUSDfix + recaudadoTemporalAnioUSD;
+  const _fixedIdsAll = properties.filter(p=>p.type==="fixed_rental"||p.type==="fija").map(p=>p.id);
+  const _cobrosFijaTodos = transactions.filter(t=> t.type==="income" && t.date && t.date.startsWith(String(now.getFullYear())) && _fixedIdsAll.includes(t.propertyId));
+  const recaudadoFijaTotalARS = _cobrosFijaTodos.reduce((s,t)=>s+(t.amountARS||0),0);
+  const recaudadoFijaTotalUSD = _cobrosFijaTodos.reduce((s,t)=>s+(t.amountUSD||arsToUsd(t.amountARS||0,tc)),0);
+  const recaudadoTotalAnioARS = recaudadoFijaTotalARS + recaudadoTemporalAnioARS;
+  const recaudadoTotalAnioUSD = recaudadoFijaTotalUSD + recaudadoTemporalAnioUSD;
 
   async function registrarCobro() {
     if (!d1?.id) { alert("Primero cargá el Depto 1 en Propiedades"); return; }
