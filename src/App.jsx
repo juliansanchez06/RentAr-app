@@ -4338,7 +4338,8 @@ function Accesos({ properties, bookings, tc, db }) {
       addLog(`🔑 PIN creado para ${nombre}: ${pinCode}`);
       return pinCode;
     } catch(e) {
-      alert("Error al crear PIN: "+e.message);
+      const _m=e.message||String(e);
+      alert("Error al crear PIN: "+_m + (/gateway/i.test(_m) ? "\n\nLa cerradura no está llegando al gateway ahora. Revisá: (1) el gateway enchufado y CERCA de la cerradura (pocos metros, sin paredes gruesas en el medio), (2) en la app TTLock la cerradura debe figurar conectada al gateway (ícono de señal), (3) si sigue, reiniciá el gateway (desenchufá/enchufá) y reintentá." : ""));
       return null;
     } finally { setLoadingAction(""); }
   }
