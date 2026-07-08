@@ -2684,6 +2684,43 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
         <div style={{...S.card,textAlign:"center",padding:60,color:C.textMuted}}><div style={{fontSize:40,marginBottom:12}}>📅</div><div>No tenés propiedades de renta temporal</div></div>
       ):(
         <>
+          {/* ── SOLICITUDES WEB PENDIENTES (reservas del sitio) ────────────── */}
+          {bookings.filter(b=>b.status==="pendiente").length>0&&(
+            <div style={{...S.card,marginBottom:24,border:"2px solid "+C.yellow}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                <div style={{fontSize:15,fontWeight:700}}>Solicitudes web pendientes</div>
+                <span style={{fontSize:11,background:C.yellowLight,color:C.yellow,padding:"2px 8px",borderRadius:20,fontWeight:700}}>{bookings.filter(b=>b.status==="pendiente").length}</span>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {bookings.filter(b=>b.status==="pendiente").sort((a,b)=>(a.createdAt||"").localeCompare(b.createdAt||"")).map(b=>{
+                  const propName=properties.find(p=>p.id===b.propertyId)?.name||"Propiedad";
+                  return (
+                    <div key={b.id} style={{background:C.bg,borderRadius:12,padding:"12px 14px",boxShadow:C.shadowInset}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                        <div style={{flex:1,minWidth:180}}>
+                          <div style={{fontSize:14,fontWeight:700}}>{b.guestName}</div>
+                          <div style={{fontSize:12,color:C.textSec,marginTop:2}}>{b.checkIn} to {b.checkOut} - {b.nights} noches - {b.personas||"-"} huesp.</div>
+                          <div style={{fontSize:12,color:C.textSec,marginTop:2}}>{propName}</div>
+                          {(b.guestPhone||b.guestEmail)&&<div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{b.guestPhone}{b.guestPhone&&b.guestEmail?" - ":""}{b.guestEmail}</div>}
+                          {b.notes&&<div style={{fontSize:11,color:C.textMuted,marginTop:4,fontStyle:"italic"}}>{b.notes}</div>}
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:14,fontWeight:700,color:C.green}}>{fARS(b.totalARS)}</div>
+                          {b.senaMonto>0&&<div style={{fontSize:11,color:C.textSec}}>sena {fARS(b.senaMonto)}{b.senaEstado==="pagada"?" ✓":""}</div>}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:10}}>
+                        <button onClick={async()=>{try{await updateDoc(doc(db,"re_bookings",b.id),{status:"confirmed",confirmadaEn:new Date().toISOString(),updatedAt:new Date().toISOString()});await reload();}catch(err){alert("Error: "+err.message);}}}
+                          style={{flex:1,background:C.green,border:"none",color:"#fff",borderRadius:8,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ Confirmar</button>
+                        <button onClick={async()=>{if(!confirm("Rechazar la solicitud de "+b.guestName+"?"))return;try{await updateDoc(doc(db,"re_bookings",b.id),{status:"cancelled",updatedAt:new Date().toISOString()});await reload();}catch(err){alert("Error: "+err.message);}}}
+                          style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Rechazar</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="grid-3" style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14,marginBottom:24}}>
             {[
               {label:"Ingresos netos del mes",value:fARS(monthIncome),sub:fUSD(monthIncome/tc),color:C.green},
