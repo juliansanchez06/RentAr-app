@@ -292,6 +292,21 @@ export default function App() {
       }));
       setTransactions(ts.docs.map(d=>({...d.data(),id:d.id})));
       setBookings(bs.docs.map(d=>({...d.data(),id:d.id})));
+      // Publicar fechas ocupadas por propiedad para el calendario del sitio web (solo fechas, sin datos de huespedes)
+      try {
+        const _bk = bs.docs.map(d=>({...d.data(),id:d.id}));
+        await Promise.all(ps.docs.map(async(pd)=>{
+          const pdata = pd.data();
+          if(!["short_term","short-term","temporal"].includes(pdata.type)) return;
+          const ocup = _bk
+            .filter(b=>b.propertyId===pd.id && b.status!=="cancelled" && b.checkIn && b.checkOut)
+            .map(b=>({checkIn:b.checkIn, checkOut:b.checkOut}))
+            .sort((a,b)=>a.checkIn.localeCompare(b.checkIn));
+          if(JSON.stringify(pdata.fechasOcupadasWeb||[]) !== JSON.stringify(ocup)){
+            await updateDoc(doc(db,"re_properties",pd.id), { fechasOcupadasWeb: ocup });
+          }
+        }));
+      } catch(err){ console.warn("sync disponibilidad web:", err); }
       if (pinDoc.exists()) { const data=pinDoc.data(); setPinnedValues(data); if(data.tc) setTc(data.tc); }
       setFbStatus("connected");
     } catch(e) { console.error(e); setFbStatus("error"); }
