@@ -1538,6 +1538,11 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
             <input type="month" value={mesLiq} onChange={e=>setMesLiq(e.target.value)} style={{...S.input,fontSize:14}}/>
           </div>
         </div>
+        {Number(cargasPct)>150 && (
+          <div style={{marginTop:10,fontSize:12,fontWeight:600,color:C.red,background:C.redLight,borderRadius:8,padding:"8px 12px"}}>
+            ⚠️ Las cargas sociales están en <strong>{cargasPct}%</strong>: parece un error de tipeo. En Argentina suelen ser <strong>~55%</strong>. Corregí ese campo para que el total no se dispare.
+          </div>
+        )}
         <div style={{marginTop:10,fontSize:12,color:C.textSec,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
           Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas {cargasPct}% <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
           <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de {_mesNombre}.</div>
