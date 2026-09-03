@@ -1633,6 +1633,15 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
           Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas {cargasPct}% <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
           <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de {_mesNombre}.</div>
         </div>
+        <button onClick={async()=>{ await saveGastos(); await guardarCierre(); }} disabled={guardandoCierre}
+          style={{...S.btnGreen, width:"100%", justifyContent:"center", marginTop:12}}>
+          {guardandoCierre?"Guardando...":`📌 Fijar gastos y cerrar ${_mesNombre}`}
+        </button>
+        <div style={{marginTop:8,fontSize:11,color:C.textSec,lineHeight:1.5}}>
+          Guarda la empleada + todos los gastos + las reservas cobradas de <strong style={{textTransform:"capitalize"}}>{_mesNombre}</strong> en el <strong>📅 Cierre de mes</strong> (más abajo): ese mes queda congelado con cuánto se ganó y cuánto se gastó.
+          {cierreMsg && <span style={{fontWeight:700,marginLeft:6,color:cierreMsg.startsWith("Error")?C.red:C.green}}>{cierreMsg}</span>}
+          {cierreExistente && !cierreMsg && <span style={{color:C.blue,marginLeft:6}}>· Ya cerrado el {new Date(cierreExistente.fechaCierre).toLocaleDateString("es-AR")}.</span>}
+        </div>
       </div>
 
       <div className="eq-grid" style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:16}}>
