@@ -1254,7 +1254,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   const [lavado3,setLavado3]           = useState(pinnedValues?.lavado3 ?? 20000);   // 3 personas (camas extra)
   const [limpCada,setLimpCada]         = useState(pinnedValues?.limpCada||3);
   const [sueldoEmpleada,setSueldoEmpleada] = useState(pinnedValues?.sueldoEmpleada||0);
-  const [cargasPct,setCargasPct]           = useState(pinnedValues?.cargasPct??55);
+  const [cargasMonto,setCargasMonto]       = useState(()=>{ const cm=pinnedValues?.cargasMonto; if(cm!=null&&cm!=="") return Number(cm); const sp=Number(pinnedValues?.sueldoEmpleada||0), cp=Number(pinnedValues?.cargasPct??0); return Math.round(sp*cp/100); });
   const [mesLiq,setMesLiq]                 = useState(()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); });
 
   // Cargar la config del depto seleccionado (doc propio; fallback a la config global para el depto principal)
@@ -1282,7 +1282,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
       setLavado3(cfg.lavado3??20000);
       setLimpCada(cfg.limpCada||3);
       setSueldoEmpleada(cfg.sueldoEmpleada||0);
-      setCargasPct(cfg.cargasPct??55);
+      setCargasMonto(cfg.cargasMonto!=null&&cfg.cargasMonto!==""?Number(cfg.cargasMonto):Math.round(Number(cfg.sueldoEmpleada||0)*Number(cfg.cargasPct??0)/100));
       setGastosSaved(false);
     })();
     return ()=>{cancel=true;};
@@ -1310,7 +1310,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   }
 
   // Empleada doméstica: sueldo + cargas sociales + aguinaldo prorrateado (1/12) = costo mensual
-  const costoEmpleadaMensual = Math.round(Number(sueldoEmpleada||0)*(1+Number(cargasPct||0)/100) + Number(sueldoEmpleada||0)/12);
+  const costoEmpleadaMensual = Math.round(Number(sueldoEmpleada||0) + Number(cargasMonto||0) + Number(sueldoEmpleada||0)/12);
   const [_liqY,_liqM] = (mesLiq||"").split("-").map(Number);
   const reservasMesActual = (bookings||[]).filter(b=>{ if(b.status!=="confirmed"||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; }).length;
   const _mesNombre = (()=>{ try{ return new Date(_liqY,(_liqM||1)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); }catch(e){ return mesLiq; } })();
@@ -1330,14 +1330,20 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   const _srcLabelEq = (s)=> ({direct:"Directa",airbnb:"Airbnb",booking:"Booking",other:"Otra"}[s]||s||"—");
   // Reservas cobradas del mes elegido (todas las propiedades)
   const reservasCobradasCierre = (bookings||[]).filter(b=>{ if(!b.cobrado||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; })
-    .map(b=>({ guestName:b.guestName||"—", propertyName:_propNameEq(b.propertyId), source:b.source, sourceLabel:_srcLabelEq(b.source), nights:b.nights||0, checkIn:b.checkIn, checkOut:b.checkOut, brutoARS:Number(b.totalARS||0), netoARS:Number(b.totalNetoARS||b.totalARS||0), comisionARS:Number(b.comisionARS||0) }));
+    .map(b=>({ guestName:b.guestName||"—", propertyId:b.propertyId, propertyName:_propNameEq(b.propertyId), source:b.source, sourceLabel:_srcLabelEq(b.source), nights:b.nights||0, checkIn:b.checkIn, checkOut:b.checkOut, brutoARS:Number(b.totalARS||0), netoARS:Number(b.totalNetoARS||b.totalARS||0), comisionARS:Number(b.comisionARS||0) }));
   const ingresoTempNetoARS = reservasCobradasCierre.reduce((s,r)=>s+r.netoARS,0);
   // Renta fija cobrada del mes (transactions income de ese mes)
   const rentaFijaCierre = (transactions||[]).filter(t=>t.type==="income" && t.date && t.date.startsWith(mesLiq))
-    .map(t=>({ propertyName:_propNameEq(t.propertyId), date:t.date, amountARS:Number(t.amountARS||0) }));
+    .map(t=>({ propertyId:t.propertyId, propertyName:_propNameEq(t.propertyId), date:t.date, amountARS:Number(t.amountARS||0) }));
   const ingresoFijaARS = rentaFijaCierre.reduce((s,t)=>s+t.amountARS,0);
   const ingresoTotalCierreARS = ingresoTempNetoARS + ingresoFijaARS;
   const resultadoCierreARS = ingresoTotalCierreARS - totalGastosARS;
+  // Ingresos separados por departamento
+  const _deptoMap = {};
+  const _pushDepto=(id,name)=>{ const k=id||name; if(!_deptoMap[k]) _deptoMap[k]={propertyId:id,propertyName:name,cantReservas:0,tempNetoARS:0,fijaARS:0}; return _deptoMap[k]; };
+  reservasCobradasCierre.forEach(r=>{ const d=_pushDepto(r.propertyId,r.propertyName); d.cantReservas++; d.tempNetoARS+=r.netoARS; });
+  rentaFijaCierre.forEach(t=>{ const d=_pushDepto(t.propertyId,t.propertyName); d.fijaARS+=t.amountARS; });
+  const porDepto = Object.values(_deptoMap).map(d=>({...d, totalARS:d.tempNetoARS+d.fijaARS, totalUSD:arsToUsd(d.tempNetoARS+d.fijaARS,tc)})).sort((a,b)=>b.totalARS-a.totalARS);
   const cierreExistente = cierres.find(c=>c.mes===mesLiq);
 
   function buildCierreSnapshot(){
@@ -1347,9 +1353,10 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
       ingresoTempNetoARS,
       rentaFija: rentaFijaCierre, ingresoFijaARS,
       ingresoTotalARS: ingresoTotalCierreARS, ingresoTotalUSD: arsToUsd(ingresoTotalCierreARS,tc),
+      porDepto,
       gastos: (gastos||[]).map(g=>({nombre:g.nombre,monto:Number(g.monto||0),moneda:g.moneda||"ARS",ars:gastoEnARS(g)})),
       gastosCargadosARS: sumaGastosARS,
-      empleada: { sueldo:Number(sueldoEmpleada||0), cargasPct:Number(cargasPct||0), cargasARS:Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100), aguinaldoARS:Math.round(Number(sueldoEmpleada||0)/12), costoMensualARS:costoEmpleadaMensual },
+      empleada: { sueldo:Number(sueldoEmpleada||0), cargasARS:Number(cargasMonto||0), aguinaldoARS:Math.round(Number(sueldoEmpleada||0)/12), costoMensualARS:costoEmpleadaMensual },
       empleadaARS: costoEmpleadaMensual,
       totalGastosARS, totalGastosUSD,
       resultadoARS: resultadoCierreARS, resultadoUSD: arsToUsd(resultadoCierreARS,tc),
@@ -1394,8 +1401,9 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
     <div class="tot"><span>Ingreso temporal (neto)</span><b>${f(c.ingresoTempNetoARS)}</b></div>
     ${c.ingresoFijaARS?`<div class="tot"><span>Renta fija</span><b>${f(c.ingresoFijaARS)}</b></div>`:""}
     <div class="tot"><span>Total ingresos</span><b class="pos">${f(c.ingresoTotalARS)} · ${u(c.ingresoTotalUSD)}</b></div>
+    ${(c.porDepto&&c.porDepto.length>1)?`<h2>Ingresos por departamento</h2><table><thead><tr><th>Departamento</th><th style="text-align:center">Reservas</th><th style="text-align:right">Ingreso ARS</th><th style="text-align:right">USD</th></tr></thead><tbody>${c.porDepto.map(d=>`<tr><td>${d.propertyName}</td><td style="text-align:center">${d.cantReservas}</td><td style="text-align:right">${f(d.totalARS)}</td><td style="text-align:right">${u(d.totalUSD)}</td></tr>`).join("")}</tbody></table>`:""}
     <h2>Gastos del mes</h2>
-    <table><tbody>${gastoRows}<tr><td>Empleada doméstica — sueldo ${f(emp.sueldo)} + cargas ${emp.cargasPct}% + aguinaldo</td><td style="text-align:right">${f(c.empleadaARS)}</td></tr></tbody></table>
+    <table><tbody>${gastoRows}<tr><td>Empleada doméstica — sueldo ${f(emp.sueldo)} + cargas ${f(emp.cargasARS)} + aguinaldo</td><td style="text-align:right">${f(c.empleadaARS)}</td></tr></tbody></table>
     <div class="tot"><span>Total gastos</span><b class="neg">${f(c.totalGastosARS)} · ${u(c.totalGastosUSD)}</b></div>
     <div class="tot big"><span>Resultado del mes</span><span class="${(c.resultadoARS||0)>=0?'pos':'neg'}">${f(c.resultadoARS)} · ${u(c.resultadoUSD)}</span></div>
     <div class="card">Ingresos ${f(c.ingresoTotalARS)} − Gastos ${f(c.totalGastosARS)} = <b>${f(c.resultadoARS)}</b> &nbsp;·&nbsp; a valor dólar $${(c.tc||0).toLocaleString("es-AR")}.</div>
@@ -1437,7 +1445,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
         lavadoCosto: Number(lavado2),
         limpCada: Number(limpCada),
         sueldoEmpleada: Number(sueldoEmpleada),
-        cargasPct: Number(cargasPct),
+        cargasMonto: Number(cargasMonto),
         platform: String(platform),
       };
       await setDoc(doc(db, "re_config", "eq_"+selectedEqProp), cfgObj, { merge: true });
@@ -1615,22 +1623,22 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
               onChange={e=>{setSueldoEmpleada(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
           <div>
-            <label style={S.label}>Cargas sociales (%)</label>
-            <input type="number" min={0} value={cargasPct}
-              onChange={e=>{setCargasPct(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
+            <label style={S.label}>Cargas sociales (ARS/mes)</label>
+            <input type="number" min={0} value={cargasMonto}
+              onChange={e=>{setCargasMonto(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
           <div>
             <label style={S.label}>Mes a liquidar</label>
             <input type="month" value={mesLiq} onChange={e=>setMesLiq(e.target.value)} style={{...S.input,fontSize:14}}/>
           </div>
         </div>
-        {Number(cargasPct)>150 && (
+        {Number(sueldoEmpleada)>0 && Number(cargasMonto)>Number(sueldoEmpleada) && (
           <div style={{marginTop:10,fontSize:12,fontWeight:600,color:C.red,background:C.redLight,borderRadius:8,padding:"8px 12px"}}>
-            ⚠️ Las cargas sociales están en <strong>{cargasPct}%</strong>: parece un error de tipeo. En Argentina suelen ser <strong>~55%</strong>. Corregí ese campo para que el total no se dispare.
+            ⚠️ Las cargas (<strong>{fARS(Number(cargasMonto||0))}</strong>) son mayores que el sueldo. Revisá que el monto esté bien cargado.
           </div>
         )}
         <div style={{marginTop:10,fontSize:12,color:C.textSec,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
-          Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas {cargasPct}% <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
+          Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas <strong style={{color:C.text}}>{fARS(Number(cargasMonto||0))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
           <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de {_mesNombre}.</div>
         </div>
         <button onClick={async()=>{ await saveGastos(); await guardarCierre(); }} disabled={guardandoCierre}
@@ -1807,6 +1815,19 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
             </div>
           </div>
 
+          {porDepto.length>1 && (
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:6}}>Ingresos por departamento</div>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                {porDepto.map(d=>(
+                  <div key={d.propertyId||d.propertyName} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:C.bg,borderRadius:8,padding:"6px 12px",boxShadow:C.shadowInset}}>
+                    <span style={{fontSize:12,fontWeight:600,color:C.text}}>{d.propertyName} <span style={{fontSize:10,color:C.textMuted,fontWeight:500}}>· {d.cantReservas} res.</span></span>
+                    <span style={{fontSize:13,fontWeight:700,color:C.green}}>{fARS(d.totalARS)} <span style={{fontSize:10,color:C.textSec,fontWeight:500}}>· {fUSD(d.totalUSD)}</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {cierreExistente && (
             <div style={{fontSize:12,color:C.blue,background:C.blueLight,borderRadius:8,padding:"6px 12px",marginBottom:10}}>
               ✓ Este mes ya fue cerrado el {new Date(cierreExistente.fechaCierre).toLocaleDateString("es-AR")}. Si guardás de nuevo, lo actualizás.
