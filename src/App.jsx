@@ -481,7 +481,7 @@ export default function App() {
             <div style={{ color:C.textSec, fontSize:14 }}>Cargando datos...</div>
           </div>
         ) : page==="dashboard"    ? <Dashboard    {...shared}/>
-          : page==="equilibrio"   ? <Equilibrio   tc={tc} properties={properties} bookings={bookings} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
+          : page==="equilibrio"   ? <Equilibrio   tc={tc} properties={properties} bookings={bookings} transactions={transactions} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
@@ -1207,7 +1207,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
-function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, setPinnedValues, db }) {
+function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedValues, pinValue, setPinnedValues, db }) {
   const defaultGastos = [
     { id:1, nombre:"Internet",             monto:15000 },
     { id:2, nombre:"Expensas",             monto:45000 },
@@ -1319,6 +1319,92 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
   const totalGastosARS = sumaGastosARS + costoEmpleadaMensual;
   const totalGastosUSD = arsToUsd(totalGastosARS,tc);
   const ingresoNecesarioARS = (totalGastosUSD+targetGanancia)*tc;
+
+  // ── Cierre de mes (todas las propiedades juntas, solo lo COBRADO) ──
+  const [cierres,setCierres]                 = useState([]);
+  const [cierreMsg,setCierreMsg]             = useState("");
+  const [guardandoCierre,setGuardandoCierre] = useState(false);
+  useEffect(()=>{ (async()=>{ try{ const snap=await getDocs(collection(db,"re_cierres")); setCierres(snap.docs.map(d=>({...d.data(),id:d.id})).sort((a,b)=>(b.mes||"").localeCompare(a.mes||""))); }catch(e){ console.warn("load cierres",e);} })(); },[db]);
+
+  const _propNameEq = (id)=> (properties.find(p=>p.id===id)?.name) || "Depto";
+  const _srcLabelEq = (s)=> ({direct:"Directa",airbnb:"Airbnb",booking:"Booking",other:"Otra"}[s]||s||"—");
+  // Reservas cobradas del mes elegido (todas las propiedades)
+  const reservasCobradasCierre = (bookings||[]).filter(b=>{ if(!b.cobrado||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; })
+    .map(b=>({ guestName:b.guestName||"—", propertyName:_propNameEq(b.propertyId), source:b.source, sourceLabel:_srcLabelEq(b.source), nights:b.nights||0, checkIn:b.checkIn, checkOut:b.checkOut, brutoARS:Number(b.totalARS||0), netoARS:Number(b.totalNetoARS||b.totalARS||0), comisionARS:Number(b.comisionARS||0) }));
+  const ingresoTempNetoARS = reservasCobradasCierre.reduce((s,r)=>s+r.netoARS,0);
+  // Renta fija cobrada del mes (transactions income de ese mes)
+  const rentaFijaCierre = (transactions||[]).filter(t=>t.type==="income" && t.date && t.date.startsWith(mesLiq))
+    .map(t=>({ propertyName:_propNameEq(t.propertyId), date:t.date, amountARS:Number(t.amountARS||0) }));
+  const ingresoFijaARS = rentaFijaCierre.reduce((s,t)=>s+t.amountARS,0);
+  const ingresoTotalCierreARS = ingresoTempNetoARS + ingresoFijaARS;
+  const resultadoCierreARS = ingresoTotalCierreARS - totalGastosARS;
+  const cierreExistente = cierres.find(c=>c.mes===mesLiq);
+
+  function buildCierreSnapshot(){
+    return {
+      mes: mesLiq, mesNombre: _mesNombre, fechaCierre: new Date().toISOString(), tc,
+      reservas: reservasCobradasCierre, cantReservas: reservasCobradasCierre.length,
+      ingresoTempNetoARS,
+      rentaFija: rentaFijaCierre, ingresoFijaARS,
+      ingresoTotalARS: ingresoTotalCierreARS, ingresoTotalUSD: arsToUsd(ingresoTotalCierreARS,tc),
+      gastos: (gastos||[]).map(g=>({nombre:g.nombre,monto:Number(g.monto||0),moneda:g.moneda||"ARS",ars:gastoEnARS(g)})),
+      gastosCargadosARS: sumaGastosARS,
+      empleada: { sueldo:Number(sueldoEmpleada||0), cargasPct:Number(cargasPct||0), cargasARS:Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100), aguinaldoARS:Math.round(Number(sueldoEmpleada||0)/12), costoMensualARS:costoEmpleadaMensual },
+      empleadaARS: costoEmpleadaMensual,
+      totalGastosARS, totalGastosUSD,
+      resultadoARS: resultadoCierreARS, resultadoUSD: arsToUsd(resultadoCierreARS,tc),
+    };
+  }
+  async function guardarCierre(){
+    setGuardandoCierre(true); setCierreMsg("");
+    try{
+      const snap=buildCierreSnapshot();
+      await setDoc(doc(db,"re_cierres",mesLiq), snap);
+      setCierres(prev=>{ const otros=prev.filter(c=>c.mes!==mesLiq); return [{...snap,id:mesLiq},...otros].sort((a,b)=>(b.mes||"").localeCompare(a.mes||"")); });
+      setCierreMsg("✓ Cierre guardado");
+      setTimeout(()=>setCierreMsg(""),3000);
+    }catch(e){ setCierreMsg("Error: "+e.message); }
+    finally{ setGuardandoCierre(false); }
+  }
+  async function borrarCierre(mes){
+    if(!confirm("¿Borrar el cierre de "+mes+"?")) return;
+    try{ await deleteDoc(doc(db,"re_cierres",mes)); setCierres(prev=>prev.filter(c=>c.mes!==mes)); }
+    catch(e){ alert("Error: "+e.message); }
+  }
+  function exportarCierrePDF(c){
+    const f=(n)=>"$"+Math.round(n||0).toLocaleString("es-AR");
+    const u=(n)=>"USD "+Math.round(n||0).toLocaleString("es-AR");
+    const rows=(c.reservas||[]).map(r=>`<tr><td>${r.guestName}</td><td>${r.propertyName}</td><td>${r.sourceLabel||r.source||""}</td><td style="text-align:center">${r.nights}</td><td>${(r.checkIn||"")} → ${(r.checkOut||"")}</td><td style="text-align:right">${f(r.netoARS)}</td></tr>`).join("");
+    const fijaRows=(c.rentaFija||[]).map(t=>`<tr><td>Renta fija</td><td>${t.propertyName}</td><td>—</td><td></td><td>${t.date}</td><td style="text-align:right">${f(t.amountARS)}</td></tr>`).join("");
+    const gastoRows=(c.gastos||[]).map(g=>`<tr><td>${g.nombre}</td><td style="text-align:right">${f(g.ars)}${g.moneda==="USD"?` <span style="color:#94a3b8">(USD ${g.monto})</span>`:""}</td></tr>`).join("");
+    const emp=c.empleada||{};
+    const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cierre ${c.mesNombre||c.mes}</title>
+    <style>*{box-sizing:border-box}body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#1e293b;margin:0;padding:32px;max-width:820px}
+    h1{font-size:22px;margin:0 0 2px}.sub{color:#64748b;font-size:12px;margin-bottom:18px}.brand{color:#2563eb;font-weight:800;letter-spacing:.5px;font-size:15px}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#2563eb;border-bottom:2px solid #dbeafe;padding-bottom:4px;margin:22px 0 8px}
+    table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:left}th{color:#64748b;font-size:10px;text-transform:uppercase}
+    .tot{display:flex;justify-content:space-between;padding:5px 8px;font-size:13px}.tot.big{font-size:18px;font-weight:800;background:#f0fdf4;border-radius:8px;margin-top:10px;padding:14px}
+    .neg{color:#dc2626}.pos{color:#16a34a}.card{background:#f8fafc;border-radius:8px;padding:12px;margin-top:10px;font-size:12px;color:#475569}
+    @media print{body{padding:0}}</style></head><body>
+    <div class="brand">RentAr</div><h1>Cierre de mes — ${c.mesNombre||c.mes}</h1>
+    <div class="sub">Generado ${new Date(c.fechaCierre||Date.now()).toLocaleString("es-AR")} · TC $${(c.tc||0).toLocaleString("es-AR")} · Todas las propiedades · Solo lo cobrado</div>
+    <h2>Ingresos cobrados (${c.cantReservas||0} reservas)</h2>
+    <table><thead><tr><th>Huésped</th><th>Depto</th><th>Canal</th><th>Noches</th><th>Fechas</th><th style="text-align:right">Neto</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" style="color:#94a3b8">Sin reservas cobradas este mes</td></tr>'}${fijaRows}</tbody></table>
+    <div class="tot"><span>Ingreso temporal (neto)</span><b>${f(c.ingresoTempNetoARS)}</b></div>
+    ${c.ingresoFijaARS?`<div class="tot"><span>Renta fija</span><b>${f(c.ingresoFijaARS)}</b></div>`:""}
+    <div class="tot"><span>Total ingresos</span><b class="pos">${f(c.ingresoTotalARS)} · ${u(c.ingresoTotalUSD)}</b></div>
+    <h2>Gastos del mes</h2>
+    <table><tbody>${gastoRows}<tr><td>Empleada doméstica — sueldo ${f(emp.sueldo)} + cargas ${emp.cargasPct}% + aguinaldo</td><td style="text-align:right">${f(c.empleadaARS)}</td></tr></tbody></table>
+    <div class="tot"><span>Total gastos</span><b class="neg">${f(c.totalGastosARS)} · ${u(c.totalGastosUSD)}</b></div>
+    <div class="tot big"><span>Resultado del mes</span><span class="${(c.resultadoARS||0)>=0?'pos':'neg'}">${f(c.resultadoARS)} · ${u(c.resultadoUSD)}</span></div>
+    <div class="card">Ingresos ${f(c.ingresoTotalARS)} − Gastos ${f(c.totalGastosARS)} = <b>${f(c.resultadoARS)}</b> &nbsp;·&nbsp; a valor dólar $${(c.tc||0).toLocaleString("es-AR")}.</div>
+    </body></html>`;
+    const w=window.open("","_blank");
+    if(!w){ alert("Permití las ventanas emergentes para poder exportar el PDF."); return; }
+    w.document.write(html); w.document.close(); w.focus();
+    setTimeout(()=>{ try{ w.print(); }catch(e){} }, 400);
+  }
 
   async function saveGastos() {
     setSaveMsg("⏳ Guardando...");
@@ -1682,6 +1768,70 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
             </div>
             <div style={{fontSize:11,color:C.green,opacity:0.8,marginTop:3}}>{fARS(targetGanancia*tc)} ARS/mes</div>
           </div>
+        </div>
+
+        {/* ── CIERRE DE MES ─────────────────────────────────────────────── */}
+        <div style={{...S.card, marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10,marginBottom:12}}>
+            <div style={{maxWidth:440}}>
+              <div style={{fontSize:15,fontWeight:800,color:C.text}}>📅 Cierre de mes</div>
+              <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Congela los ingresos cobrados, los gastos y la empleada del mes elegido (todas las propiedades juntas). Podés verlo acá y exportarlo en PDF.</div>
+            </div>
+            <input type="month" value={mesLiq} onChange={e=>setMesLiq(e.target.value)} style={{...S.input,width:170,fontSize:14}}/>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:12}}>
+            <div style={{background:C.greenLight,borderRadius:12,padding:12}}>
+              <div style={{fontSize:10,color:C.green,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Ingresos cobrados</div>
+              <div style={{fontSize:18,fontWeight:800,color:C.green,marginTop:2}}>{fARS(ingresoTotalCierreARS)}</div>
+              <div style={{fontSize:11,color:C.green,opacity:0.85}}>{fUSD(arsToUsd(ingresoTotalCierreARS,tc))} · {reservasCobradasCierre.length} reservas{ingresoFijaARS>0?" + fija":""}</div>
+            </div>
+            <div style={{background:C.redLight,borderRadius:12,padding:12}}>
+              <div style={{fontSize:10,color:C.red,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Gastos del mes</div>
+              <div style={{fontSize:18,fontWeight:800,color:C.red,marginTop:2}}>{fARS(totalGastosARS)}</div>
+              <div style={{fontSize:11,color:C.red,opacity:0.85}}>{fUSD(totalGastosUSD)} · empleada {fARS(costoEmpleadaMensual)}</div>
+            </div>
+            <div style={{background:C.bg,borderRadius:12,padding:12,boxShadow:C.shadowInset}}>
+              <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>Resultado</div>
+              <div style={{fontSize:18,fontWeight:800,marginTop:2,color:resultadoCierreARS>=0?C.green:C.red}}>{fARS(resultadoCierreARS)}</div>
+              <div style={{fontSize:11,color:C.textSec}}>{fUSD(arsToUsd(resultadoCierreARS,tc))}</div>
+            </div>
+          </div>
+
+          {cierreExistente && (
+            <div style={{fontSize:12,color:C.blue,background:C.blueLight,borderRadius:8,padding:"6px 12px",marginBottom:10}}>
+              ✓ Este mes ya fue cerrado el {new Date(cierreExistente.fechaCierre).toLocaleDateString("es-AR")}. Si guardás de nuevo, lo actualizás.
+            </div>
+          )}
+
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <button onClick={guardarCierre} disabled={guardandoCierre} style={{...S.btnGreen,justifyContent:"center"}}>
+              {guardandoCierre?"Guardando...":cierreExistente?"💾 Actualizar cierre":"💾 Guardar cierre"}
+            </button>
+            <button onClick={()=>exportarCierrePDF(buildCierreSnapshot())} style={{...S.btn,justifyContent:"center"}}>📄 Exportar PDF</button>
+            {cierreMsg && <span style={{fontSize:13,fontWeight:600,color:cierreMsg.startsWith("Error")?C.red:C.green}}>{cierreMsg}</span>}
+          </div>
+
+          {cierres.length>0 && (
+            <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid "+C.border}}>
+              <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:8}}>Cierres guardados</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {cierres.map(c=>(
+                  <div key={c.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,background:C.bg,borderRadius:10,padding:"8px 12px",boxShadow:C.shadowInset}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,textTransform:"capitalize"}}>{c.mesNombre||c.mes}</div>
+                      <div style={{fontSize:11,color:C.textSec}}>{c.cantReservas||0} reservas · Ing. {fARS(c.ingresoTotalARS)} · Gastos {fARS(c.totalGastosARS)}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:14,fontWeight:800,color:(c.resultadoARS||0)>=0?C.green:C.red}}>{fARS(c.resultadoARS)}</span>
+                      <button onClick={()=>exportarCierrePDF(c)} title="Exportar PDF" style={{...S.btnSec,padding:"6px 10px",fontSize:12}}>📄 PDF</button>
+                      <button onClick={()=>borrarCierre(c.mes)} title="Borrar cierre" style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:30,height:30,cursor:"pointer",fontSize:15,flexShrink:0}}>×</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── TABLA ESCENARIOS ──────────────────────────────────────────── */}
