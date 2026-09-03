@@ -1255,6 +1255,7 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
   const [limpCada,setLimpCada]         = useState(pinnedValues?.limpCada||3);
   const [sueldoEmpleada,setSueldoEmpleada] = useState(pinnedValues?.sueldoEmpleada||0);
   const [cargasPct,setCargasPct]           = useState(pinnedValues?.cargasPct??55);
+  const [mesLiq,setMesLiq]                 = useState(()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); });
 
   // Cargar la config del depto seleccionado (doc propio; fallback a la config global para el depto principal)
   useEffect(()=>{
@@ -1310,8 +1311,9 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
 
   // Empleada doméstica: sueldo + cargas sociales + aguinaldo prorrateado (1/12) = costo mensual
   const costoEmpleadaMensual = Math.round(Number(sueldoEmpleada||0)*(1+Number(cargasPct||0)/100) + Number(sueldoEmpleada||0)/12);
-  const _nowEq = new Date();
-  const reservasMesActual = (bookings||[]).filter(b=>b.status==="confirmed" && b.checkIn && new Date(b.checkIn).getMonth()===_nowEq.getMonth() && new Date(b.checkIn).getFullYear()===_nowEq.getFullYear()).length;
+  const [_liqY,_liqM] = (mesLiq||"").split("-").map(Number);
+  const reservasMesActual = (bookings||[]).filter(b=>{ if(b.status!=="confirmed"||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; }).length;
+  const _mesNombre = (()=>{ try{ return new Date(_liqY,(_liqM||1)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); }catch(e){ return mesLiq; } })();
   const empleadaPorReserva = reservasMesActual>0 ? Math.round(costoEmpleadaMensual/reservasMesActual) : costoEmpleadaMensual;
   const totalGastosARS = gastos.reduce((s,g)=>s+gastoEnARS(g),0) + costoEmpleadaMensual;
   const totalGastosUSD = arsToUsd(totalGastosARS,tc);
@@ -1516,7 +1518,7 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
           <div style={{textAlign:"right",background:C.bg,borderRadius:10,padding:"8px 14px",boxShadow:C.shadowInset,minWidth:180}}>
             <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:2}}>Costo total / mes</div>
             <div style={{fontSize:20,fontWeight:800,color:C.red}}>{fARS(costoEmpleadaMensual)}</div>
-            <div style={{fontSize:11,color:C.textSec}}>{reservasMesActual>0?`${fARS(empleadaPorReserva)} × ${reservasMesActual} reservas`:"sin reservas este mes"}</div>
+            <div style={{fontSize:11,color:C.textSec}}>{reservasMesActual>0?`${fARS(empleadaPorReserva)} × ${reservasMesActual} reservas`:"sin reservas ese mes"}</div>
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
@@ -1530,10 +1532,14 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
             <input type="number" min={0} value={cargasPct}
               onChange={e=>{setCargasPct(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
+          <div>
+            <label style={S.label}>Mes a liquidar</label>
+            <input type="month" value={mesLiq} onChange={e=>setMesLiq(e.target.value)} style={{...S.input,fontSize:14}}/>
+          </div>
         </div>
         <div style={{marginTop:10,fontSize:12,color:C.textSec,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
           Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas {cargasPct}% <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
-          <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de este mes.</div>
+          <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de {_mesNombre}.</div>
         </div>
       </div>
 
