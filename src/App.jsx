@@ -1315,7 +1315,8 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
   const reservasMesActual = (bookings||[]).filter(b=>{ if(b.status!=="confirmed"||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; }).length;
   const _mesNombre = (()=>{ try{ return new Date(_liqY,(_liqM||1)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); }catch(e){ return mesLiq; } })();
   const empleadaPorReserva = reservasMesActual>0 ? Math.round(costoEmpleadaMensual/reservasMesActual) : costoEmpleadaMensual;
-  const totalGastosARS = gastos.reduce((s,g)=>s+gastoEnARS(g),0) + costoEmpleadaMensual;
+  const sumaGastosARS  = gastos.reduce((s,g)=>s+gastoEnARS(g),0);
+  const totalGastosARS = sumaGastosARS + costoEmpleadaMensual;
   const totalGastosUSD = arsToUsd(totalGastosARS,tc);
   const ingresoNecesarioARS = (totalGastosUSD+targetGanancia)*tc;
 
@@ -1567,15 +1568,15 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
           <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>Ingresá en ARS o USD — se convierte automáticamente</div>
 
           {/* Header columnas */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 90px 50px 30px",gap:6,marginBottom:6,padding:"0 2px"}}>
-            {["Gasto","Monto","USD equiv.",""].map(h=>(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 86px 82px 28px",gap:6,marginBottom:6,padding:"0 2px"}}>
+            {["Gasto","Monto","Equiv.",""].map(h=>(
               <div key={h} style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</div>
             ))}
           </div>
 
           <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:12}}>
             {gastos.map(g=>(
-              <div key={g.id} style={{display:"grid",gridTemplateColumns:"1fr 90px 50px 30px",gap:6,alignItems:"center"}}>
+              <div key={g.id} style={{display:"grid",gridTemplateColumns:"1fr 86px 82px 28px",gap:6,alignItems:"center"}}>
                 <input value={g.nombre}
                   onChange={e=>{setGastos(gastos.map(x=>x.id===g.id?{...x,nombre:e.target.value}:x));setGastosSaved(false);}}
                   style={{...S.input,fontSize:13,padding:"7px 10px"}}/>
@@ -1594,8 +1595,8 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
                     style={{...S.input,paddingLeft:40,fontSize:13,padding:"7px 6px 7px 40px"}}/>
                 </div>
                 {/* Equivalente USD */}
-                <div style={{fontSize:11,fontWeight:600,color:C.green,textAlign:"right"}}>
-                  {fUSD(gastoEnUSD(g))}
+                <div style={{fontSize:10,fontWeight:700,textAlign:"right",lineHeight:1.15,color:g.moneda==="USD"?C.red:C.green}}>
+                  {g.moneda==="USD" ? fARS(gastoEnARS(g)) : fUSD(gastoEnUSD(g))}
                 </div>
                 <button onClick={()=>{setGastos(gastos.filter(x=>x.id!==g.id));setGastosSaved(false);}}
                   style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,width:28,height:32,cursor:"pointer",fontSize:15}}>×</button>
@@ -1644,6 +1645,14 @@ function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, se
           {/* Totales */}
           <div style={{background:C.bg,borderRadius:10,padding:12,boxShadow:C.shadowInset,marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.3px"}}>Total gastos / mes</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:12,color:C.textMuted}}>Gastos cargados</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{fARS(sumaGastosARS)}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,paddingBottom:8,borderBottom:"1px solid "+C.border}}>
+              <span style={{fontSize:12,color:C.textMuted}}>Empleada doméstica</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.text}}>{fARS(costoEmpleadaMensual)}</span>
+            </div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
               <span style={{fontSize:13,color:C.textSec}}>En pesos</span>
               <span style={{fontSize:15,fontWeight:700,color:C.red}}>{fARS(totalGastosARS)}</span>
