@@ -481,7 +481,7 @@ export default function App() {
             <div style={{ color:C.textSec, fontSize:14 }}>Cargando datos...</div>
           </div>
         ) : page==="dashboard"    ? <Dashboard    {...shared}/>
-          : page==="equilibrio"   ? <Equilibrio   tc={tc} properties={properties} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
+          : page==="equilibrio"   ? <Equilibrio   tc={tc} properties={properties} bookings={bookings} pinnedValues={pinnedValues} pinValue={pinValue} setPinnedValues={setPinnedValues} db={db}/>
           : page==="properties"   ? <Properties   {...shared} pinnedValues={pinnedValues} pinValue={pinValue}/>
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
@@ -1207,7 +1207,7 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
 
 
 // ── PUNTO DE EQUILIBRIO ───────────────────────────────────────────────────────
-function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues, db }) {
+function Equilibrio({ tc, properties=[], bookings=[], pinnedValues, pinValue, setPinnedValues, db }) {
   const defaultGastos = [
     { id:1, nombre:"Internet",             monto:15000 },
     { id:2, nombre:"Expensas",             monto:45000 },
@@ -1253,6 +1253,8 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
   const [lavado2,setLavado2]           = useState(pinnedValues?.lavado2 ?? (pinnedValues?.lavadoCosto||14000)); // matrimonio (1 cama doble)
   const [lavado3,setLavado3]           = useState(pinnedValues?.lavado3 ?? 20000);   // 3 personas (camas extra)
   const [limpCada,setLimpCada]         = useState(pinnedValues?.limpCada||3);
+  const [sueldoEmpleada,setSueldoEmpleada] = useState(pinnedValues?.sueldoEmpleada||0);
+  const [cargasPct,setCargasPct]           = useState(pinnedValues?.cargasPct??55);
 
   // Cargar la config del depto seleccionado (doc propio; fallback a la config global para el depto principal)
   useEffect(()=>{
@@ -1278,6 +1280,8 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
       setLavado2(cfg.lavado2 ?? (cfg.lavadoCosto||14000));
       setLavado3(cfg.lavado3??20000);
       setLimpCada(cfg.limpCada||3);
+      setSueldoEmpleada(cfg.sueldoEmpleada||0);
+      setCargasPct(cfg.cargasPct??55);
       setGastosSaved(false);
     })();
     return ()=>{cancel=true;};
@@ -1285,7 +1289,7 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
   },[selectedEqProp]);
 
   const commPct = platform==="airbnb"?commAirbnb:platform==="booking"?commBooking:0;
-  const commTotal = commPct + Number(commGestion||0); // plataforma + gestión del depto (ambas sobre el bruto)
+  const commTotal = commPct; // solo comisión de la plataforma (Booking/Airbnb)
   // Limpieza = costo FIJO por estadía (1 limpieza + 1 lavado por inquilino), NO por noche
   const lavadoPorPersonas = (personas) => personas<=1 ? Number(lavado1||0) : personas===2 ? Number(lavado2||0) : Number(lavado3||0);
   const costoLimpieza = (personas) => Math.round(Number(limpHoras||0)*Number(limpCostoHora||0) + lavadoPorPersonas(personas));
@@ -1304,7 +1308,12 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
     return g.moneda === "USD" ? g.monto : arsToUsd(g.monto, tc);
   }
 
-  const totalGastosARS = gastos.reduce((s,g)=>s+gastoEnARS(g),0);
+  // Empleada doméstica: sueldo + cargas sociales + aguinaldo prorrateado (1/12) = costo mensual
+  const costoEmpleadaMensual = Math.round(Number(sueldoEmpleada||0)*(1+Number(cargasPct||0)/100) + Number(sueldoEmpleada||0)/12);
+  const _nowEq = new Date();
+  const reservasMesActual = (bookings||[]).filter(b=>b.status==="confirmed" && b.checkIn && new Date(b.checkIn).getMonth()===_nowEq.getMonth() && new Date(b.checkIn).getFullYear()===_nowEq.getFullYear()).length;
+  const empleadaPorReserva = reservasMesActual>0 ? Math.round(costoEmpleadaMensual/reservasMesActual) : costoEmpleadaMensual;
+  const totalGastosARS = gastos.reduce((s,g)=>s+gastoEnARS(g),0) + costoEmpleadaMensual;
   const totalGastosUSD = arsToUsd(totalGastosARS,tc);
   const ingresoNecesarioARS = (totalGastosUSD+targetGanancia)*tc;
 
@@ -1338,6 +1347,8 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
         lavado3: Number(lavado3),
         lavadoCosto: Number(lavado2),
         limpCada: Number(limpCada),
+        sueldoEmpleada: Number(sueldoEmpleada),
+        cargasPct: Number(cargasPct),
         platform: String(platform),
       };
       await setDoc(doc(db, "re_config", "eq_"+selectedEqProp), cfgObj, { merge: true });
@@ -1376,15 +1387,14 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
 
   const escenarios=[1,2,3,5,7,10,12,15,20,25].map(noches=>{
     const pm = pricingMultiplier(noches);
-    const cleaningFeeTotal = numLimpiezas(noches) * costoPorLimpieza; // 1 limpieza cada limpCada noches
+    const cleaningFeeTotal = 0; // limpieza ahora es gasto mensual (empleada), no por reserva
     const ingresoNecBase = ingresoNecesarioARS / pm.mult;
     const brutoNecesario = Math.ceil((ingresoNecBase+cleaningFeeTotal)/(1-commTotal/100)/noches/1000)*1000;
     const ingresoBruto   = brutoNecesario*noches+cleaningFeeTotal;
     const comision       = Math.round(ingresoBruto*commPct/100);
-    const comisionGestion= Math.round(ingresoBruto*Number(commGestion||0)/100);
-    const ingresoNeto    = ingresoBruto-comision-comisionGestion;
+    const ingresoNeto    = ingresoBruto-comision;
     const gananciaUSD    = arsToUsd(ingresoNeto-totalGastosARS-cleaningFeeTotal,tc);
-    return {noches,brutoNecesario,ingresoBruto,comision,comisionGestion,ingresoNeto,cleaningFeeTotal,gananciaUSD,
+    return {noches,brutoNecesario,ingresoBruto,comision,ingresoNeto,cleaningFeeTotal,gananciaUSD,
       ocupacion:Math.round(noches/30*100), pm};
   });
 
@@ -1444,7 +1454,7 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
           {[
             {n:"1",t:"Tus números",d:"Cargás los gastos fijos del mes y la ganancia que querés en USD. El simulador calcula cuánta plata neta tenés que generar por mes."},
-            {n:"2",t:"Comisiones",d:"Elegís la plataforma (Directa, Airbnb o Booking) y la comisión por gestión del depto. Esas comisiones se descuentan de lo que cobrás."},
+            {n:"2",t:"Comisiones",d:"Elegís la plataforma (Directa, Airbnb o Booking). Su comisión se descuenta de lo que cobrás."},
             {n:"3",t:"Política de noches",d:"El precio sube si la estadía es corta (1–2 noches) y baja en estadías largas (semana, mes). Vos definís el mínimo de noches."},
             {n:"4",t:"Resultado",d:"Para cada combinación de personas × noches ves: precio por noche, lo que paga el huésped, lo que te queda a vos y cuántas reservas necesitás para tu meta."},
           ].map(step=>(
@@ -1458,7 +1468,7 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
           ))}
         </div>
         <div style={{marginTop:12,fontSize:12,color:C.text,background:C.white,borderRadius:10,padding:"10px 12px",boxShadow:C.shadowInset}}>
-          <strong style={{color:C.blue}}>Lo que te queda a vos</strong> = precio × noches − comisión de plataforma − comisión de gestión − limpieza.
+          <strong style={{color:C.blue}}>Lo que te queda a vos</strong> = precio × noches − comisión de plataforma (Booking). La limpieza va aparte como gasto mensual de la empleada.
         </div>
       </div>
 
@@ -1494,79 +1504,36 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
           ))}
         </div>
 
-        {/* 🛠️ Comisión por gestión del depto — se aplica SIEMPRE, además de la plataforma */}
-        <div style={{marginTop:14,paddingTop:14,borderTop:"1px solid "+C.border,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-          <div style={{maxWidth:380}}>
-            <div style={{fontSize:13,fontWeight:700,color:C.text}}>🛠️ Comisión por gestión del depto</div>
-            <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Se descuenta <strong>siempre</strong>, además de la comisión de plataforma (limpieza, check-in, atención al huésped…).</div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <input type="number" value={commGestion} min={0} max={50}
-              onChange={e=>{setCommGestion(Number(e.target.value));setGastosSaved(false);}}
-              style={{...S.input,width:64,textAlign:"center",fontWeight:700,fontSize:18,padding:"6px 8px"}}/>
-            <span style={{fontSize:14,color:C.textSec,fontWeight:700}}>%</span>
-            <PinBtn pinKey="commGestion" value={commGestion} pinnedValues={pinnedValues} pinValue={pinValue}/>
-          </div>
-        </div>
       </div>
 
-      {/* 🧹 Costo de limpieza por ESTADÍA (no por noche) */}
+      {/* 🧹 Empleada doméstica (limpieza) — gasto mensual con cargas y aguinaldo */}
       <div style={{...S.card,marginBottom:16}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:12}}>
-          <div style={{maxWidth:440}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.text}}>🧹 Costo de limpieza</div>
-            <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Cada limpieza incluye trabajo + lavado de sábanas y toallas. Hay que limpiar <strong>cada {limpCada} {limpCada===1?"noche":"noches"}</strong> (también al medio en estadías largas). En estadías cortas, la misma limpieza se reparte entre más noches.</div>
+          <div style={{maxWidth:460}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.text}}>🧹 Empleada doméstica (limpieza)</div>
+            <div style={{fontSize:11,color:C.textSec,marginTop:2}}>Cargá el sueldo y la app suma las <strong>cargas sociales</strong> y el <strong>aguinaldo</strong>. Es un gasto mensual que se reparte entre las <strong>reservas reales del mes</strong> (no se descuenta por reserva en el precio).</div>
           </div>
-          <div style={{textAlign:"right",background:C.bg,borderRadius:10,padding:"8px 14px",boxShadow:C.shadowInset,minWidth:170}}>
-            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:4}}>Por cada limpieza</div>
-            {[{p:1,l:"👤 1 persona"},{p:2,l:"💑 Matrimonio"},{p:3,l:"👨‍👩‍👦 3 personas"}].map(({p,l})=>(
-              <div key={p} style={{display:"flex",justifyContent:"space-between",gap:12,fontSize:12,marginTop:2}}>
-                <span style={{color:C.textSec}}>{l}</span>
-                <strong style={{color:C.red}}>{fARS(costoLimpieza(p))}</strong>
-              </div>
-            ))}
+          <div style={{textAlign:"right",background:C.bg,borderRadius:10,padding:"8px 14px",boxShadow:C.shadowInset,minWidth:180}}>
+            <div style={{fontSize:10,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.3px",marginBottom:2}}>Costo total / mes</div>
+            <div style={{fontSize:20,fontWeight:800,color:C.red}}>{fARS(costoEmpleadaMensual)}</div>
+            <div style={{fontSize:11,color:C.textSec}}>{reservasMesActual>0?`${fARS(empleadaPorReserva)} × ${reservasMesActual} reservas`:"sin reservas este mes"}</div>
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:10}}>
           <div>
-            <label style={S.label}>Horas de limpieza</label>
-            <input type="number" step="0.5" min={0} value={limpHoras}
-              onChange={e=>{setLimpHoras(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
+            <label style={S.label}>Sueldo empleada (ARS/mes)</label>
+            <input type="number" min={0} value={sueldoEmpleada}
+              onChange={e=>{setSueldoEmpleada(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
           <div>
-            <label style={S.label}>Costo por hora (ARS)</label>
-            <input type="number" min={0} value={limpCostoHora}
-              onChange={e=>{setLimpCostoHora(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-          </div>
-          <div>
-            <label style={S.label}>Limpiar cada (noches)</label>
-            <input type="number" min={1} value={limpCada}
-              onChange={e=>{setLimpCada(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-          </div>
-        </div>
-        <div style={{marginTop:12}}>
-          <label style={S.label}>Lavado de sábanas y toallas — según cuántos duermen (ARS)</label>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10}}>
-            <div>
-              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>👤 1 persona</div>
-              <input type="number" min={0} value={lavado1}
-                onChange={e=>{setLavado1(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-            </div>
-            <div>
-              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>💑 Matrimonio (2)</div>
-              <input type="number" min={0} value={lavado2}
-                onChange={e=>{setLavado2(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-            </div>
-            <div>
-              <div style={{fontSize:11,color:C.textMuted,marginBottom:4}}>👨‍👩‍👦 3 personas</div>
-              <input type="number" min={0} value={lavado3}
-                onChange={e=>{setLavado3(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
-            </div>
+            <label style={S.label}>Cargas sociales (%)</label>
+            <input type="number" min={0} value={cargasPct}
+              onChange={e=>{setCargasPct(Number(e.target.value));setGastosSaved(false);}} style={{...S.input,fontSize:14}}/>
           </div>
         </div>
         <div style={{marginTop:10,fontSize:12,color:C.textSec,background:C.bg,borderRadius:8,padding:"8px 12px"}}>
-          Cuenta: <strong style={{color:C.text}}>{limpHoras}h × {fARS(limpCostoHora)}</strong> = {fARS(Math.round(Number(limpHoras||0)*Number(limpCostoHora||0)))} de trabajo + el lavado según ocupación. La matriz aplica el lavado que corresponde a cada cantidad de personas. Limpiás cada <strong style={{color:C.text}}>{limpCada} {limpCada===1?"noche":"noches"}</strong>.
-          <div style={{marginTop:6,color:C.blue}}>💡 Por eso <strong>{limpCada} noches</strong> suele ser el mínimo óptimo: una sola limpieza repartida en {limpCada} noches y el depto ya queda listo para el próximo.</div>
+          Cuenta: sueldo <strong style={{color:C.text}}>{fARS(Number(sueldoEmpleada||0))}</strong> + cargas {cargasPct}% <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)*Number(cargasPct||0)/100))}</strong> + aguinaldo <strong style={{color:C.text}}>{fARS(Math.round(Number(sueldoEmpleada||0)/12))}</strong> = <strong style={{color:C.red}}>{fARS(costoEmpleadaMensual)}</strong>/mes.
+          <div style={{marginTop:6,color:C.blue}}>💡 El aguinaldo es un sueldo extra al año; lo prorrateo (1/12 por mes) para un costo mensual parejo. Se suma a los gastos y se reparte entre las <strong>{reservasMesActual||0}</strong> reservas de este mes.</div>
         </div>
       </div>
 
@@ -1703,7 +1670,6 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
           <div style={{fontSize:12,color:C.textSec,marginBottom:14}}>
             Plataforma: <strong>{platform==="direct"?"Directa":platform==="airbnb"?"Airbnb":"Booking"}</strong>
             {commPct>0&&<span style={{color:C.red}}> (−{commPct}%)</span>}
-            {commGestion>0&&<span style={{color:C.red}}> · gestión −{commGestion}%</span>}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 80px 50px",gap:8,padding:"6px 10px",marginBottom:4}}>
             {["Noches","Precio/noche","Ing. neto","Ganancia",""].map(h=>(
@@ -1774,7 +1740,6 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
             }}>
               {platform==="direct"?"✓ Sin comisión":platform==="airbnb"?`Airbnb −${commAirbnb}%`:`Booking −${commBooking}%`}
             </span>
-            {commGestion>0&&<span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,background:"#fde68a",color:"#854d0e"}}>🛠️ Gestión −{commGestion}%</span>}
             <span style={{fontSize:11,color:C.textMuted}}>· Mínimo {minNights} {minNights===1?"noche":"noches"}</span>
           </div>
         </div>
@@ -1833,12 +1798,9 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
                       const pm = pricingMultiplier(noches);
                       // Precio con multiplicador de noches aplicado sobre tarifa de personas
                       const precioNoche = Math.round(tarifaPers * pm.mult);
-                      const bruto       = precioNoche * noches; // solo precio × noches, sin limpieza
+                      const bruto       = precioNoche * noches;
                       const comision    = Math.round(bruto * commPct / 100);
-                      const comisionGestion = Math.round(bruto * Number(commGestion||0) / 100);
-                      const netoComision= bruto - comision - comisionGestion;
-                      const costoLimp   = numLimpiezas(noches) * costoLimpieza(personas); // limpieza según ocupación, cada limpCada noches
-                      const neto        = netoComision - costoLimp; // ganancia de la reserva (antes de gastos fijos)
+                      const neto        = bruto - comision; // solo comisión de la plataforma (Booking/Airbnb)
                       const netoUSD     = arsToUsd(neto, tc);
                       const gastosUSD   = totalGastosUSD;
                       const gastosPropUSD   = totalGastosUSD * (noches/30); // parte proporcional de gastos fijos del mes
@@ -1878,11 +1840,9 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
                               <div style={{fontSize:11,fontWeight:700,color:C.green,marginTop:3}}>{fARS(neto)}</div>
                               <div style={{fontSize:10,color:C.green,fontWeight:600}}>{fUSD(netoUSD)}</div>
                               <div style={{fontSize:9,color:C.textMuted}}>recibís vos</div>
-                              {(commPct>0||comisionGestion>0||costoLimp>0)&&(
+                              {commPct>0&&(
                                 <div style={{fontSize:8,color:C.red,marginTop:1}}>
-                                  {commPct>0?`−${fARS(comision)} com.`:""}
-                                  {comisionGestion>0?` −${fARS(comisionGestion)} gest.`:""}
-                                  {costoLimp>0?` −${fARS(costoLimp)} limp.${numLimpiezas(noches)>1?` (${numLimpiezas(noches)}×)`:""}`:""}
+                                  −{fARS(comision)} com. Booking
                                 </div>
                               )}
 
@@ -1940,7 +1900,7 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
             <strong style={{color:"#34d399"}}>{fARS(Math.round(tarifaBase * pricingMultiplier(minNights).mult))}/noche</strong>.
             Para cubrir tus gastos de {fUSD(totalGastosUSD)}/mes y ganar {fUSD(targetGanancia)}/mes necesitás al menos{" "}
             <strong style={{color:"#fbbf24"}}>
-              {Math.ceil((totalGastosUSD+targetGanancia)/arsToUsd(Math.round(tarifaBase*pricingMultiplier(minNights).mult)*minNights+numLimpiezas(minNights)*costoPorLimpieza,tc))} reservas de {minNights} {minNights===1?"noche":"noches"}
+              {Math.ceil((totalGastosUSD+targetGanancia)/arsToUsd(Math.round(tarifaBase*pricingMultiplier(minNights).mult)*minNights,tc))} reservas de {minNights} {minNights===1?"noche":"noches"}
             </strong>{" "}con el depto lleno.
             {commPct>0&&<span> Recordá el {commPct}% de comisión de {platform==="airbnb"?"Airbnb":"Booking"}.</span>}
           </div>
@@ -1956,11 +1916,10 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
             {t:"Filas y columnas",d:"Cada fila es la cantidad de personas (con su descuento de grupo). Cada columna es la duración de la estadía, en noches."},
             {t:"Precio / noche",d:"Lo que cobrás por noche. Ya incluye el recargo por estadía corta (1–2 noches) o el descuento por estadía larga."},
             {t:"Huésped paga",d:"El total de la reserva = precio por noche × cantidad de noches."},
-            {t:"Recibís vos",d:"Tu ganancia neta de esa reserva, después de restar comisiones y limpieza (todavía sin tus gastos fijos del mes)."},
+            {t:"Recibís vos",d:"Lo que te queda de esa reserva después de la comisión de Booking (todavía sin los gastos fijos ni la empleada del mes)."},
             {t:"Neto real (−fijos)",d:"Lo que realmente te queda de esa reserva descontando además la parte proporcional de tus gastos fijos del mes, según las noches que ocupa (noches/30). Verde = positivo, rojo = pierde."},
             {t:"com. (comisión)",d:"Comisión de la plataforma (Airbnb o Booking). En venta directa es 0%."},
-            {t:"gest. (gestión)",d:"Comisión por gestión del depto. Se descuenta siempre, además de la de plataforma."},
-            {t:"limp. (limpieza)",d:"Costo de limpieza de la estadía. El (2×), (3×)… indica cuántas limpiezas hay: se limpia cada X noches, también al medio en estadías largas."},
+            {t:"limpieza / empleada",d:"La limpieza NO se descuenta por reserva: es un gasto mensual (sueldo de la empleada + cargas + aguinaldo) que se reparte entre las reservas del mes."},
             {t:"Badge inferior (ej. 6× = 12n/mes)",d:"Usa tu ocupación estimada del mes (la elegís en el Dashboard, tope 30 noches): cuántas reservas de esta duración entran, cuántas noches ocupás, y abajo tu ganancia neta del mes a esa ocupación. Verde = llegás a la meta."},
           ].map(r=>(
             <div key={r.t} style={{background:C.bg,borderRadius:10,padding:"10px 12px",boxShadow:C.shadowInset}}>
@@ -1984,7 +1943,7 @@ function Equilibrio({ tc, properties=[], pinnedValues, pinValue, setPinnedValues
           ))}
         </div>
         <div style={{marginTop:14,padding:"12px 14px",background:C.skySoft,borderRadius:10,fontSize:12,color:C.text,lineHeight:1.6}}>
-          <strong style={{color:C.blue}}>Cuenta completa:</strong> Recibís vos = (precio × noches) − comisión de plataforma − comisión de gestión − limpieza. La limpieza se cobra una vez cada {limpCada} {limpCada===1?"noche":"noches"}; por eso, a más noches, el costo de limpieza por noche baja.
+          <strong style={{color:C.blue}}>Cuenta completa:</strong> Recibís vos = (precio × noches) − comisión de plataforma (Booking). La limpieza (empleada doméstica) es un gasto mensual aparte que se reparte entre las reservas del mes.
         </div>
       </div>
 
