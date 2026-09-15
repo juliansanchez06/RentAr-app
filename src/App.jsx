@@ -338,6 +338,15 @@ export default function App() {
 
   const shared = { properties, transactions, bookings, tc, setTc, pinnedValues, pinValue, reload:loadAll, db, setPage, user };
 
+  // ── Control de acceso a la Cerradura por usuario ──
+  const LOCK_OWNER_EMAILS = ["juliansanchez06@gmail.com"];   // control total de la cerradura (propietario)
+  const LOCK_USER_EMAILS  = ["vittuge@gmail.com"];           // co-anfitrión: genera códigos, ve estado/accesos, borra los suyos
+  const _uemail     = (user?.email||"").trim().toLowerCase();
+  const isLockOwner = LOCK_OWNER_EMAILS.includes(_uemail);
+  const isLockUser  = LOCK_USER_EMAILS.includes(_uemail);
+  const canSeeLock  = isLockOwner || isLockUser;
+  const visibleNav  = canSeeLock ? NAV : NAV.filter(n=>n.id!=="accesos");
+
   return (
     <div className="rentar-layout" style={{ display:"flex", flexDirection:"column", minHeight:"100vh", background:C.bg, fontFamily:"'Inter',system-ui,sans-serif", color:C.text }}>
       {/* ── TOP NAVIGATION BAR ───────────────────────────────────────── */}
@@ -418,7 +427,7 @@ export default function App() {
           padding:"0 16px", background:"#fff",
           height:44, overflow:"hidden",
         }}>
-          {NAV.map((n,i)=>(
+          {visibleNav.map((n,i)=>(
             <button key={n.id} onClick={()=>setPage(n.id)} style={{
               flex:1, display:"flex", alignItems:"center", justifyContent:"center",
               gap:5, border:"none", cursor:"pointer",
@@ -426,7 +435,7 @@ export default function App() {
               color:page===n.id?C.blue:C.textSec,
               fontSize:11.5, fontWeight:page===n.id?700:500,
               borderBottom:page===n.id?"3px solid "+C.blue:"3px solid transparent",
-              borderRight:i<NAV.length-1?"1px solid "+C.border:"none",
+              borderRight:i<visibleNav.length-1?"1px solid "+C.border:"none",
               transition:"all 0.15s ease",
               padding:"0 4px",
               whiteSpace:"nowrap",
@@ -450,7 +459,7 @@ export default function App() {
 
             {/* ── MOBILE BOTTOM NAV ─────────────────────────────────────────── */}
       <nav className="mobile-nav" style={{ display:"none" }}>
-        {NAV.map(n=>(
+        {visibleNav.map(n=>(
           <button key={n.id} onClick={()=>setPage(n.id)} style={{
             flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
             gap:2, padding:"6px 2px 4px", border:"none",
@@ -486,7 +495,9 @@ export default function App() {
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
           : page==="transactions" ? <Transactions {...shared}/>
-          : page==="accesos"      ? <Accesos      {...shared}/>
+          : page==="accesos"      ? (isLockOwner ? <Accesos {...shared}/> : isLockUser ? <LockLite {...shared}/> : (
+              <div style={{padding:40,textAlign:"center",color:C.textSec}}>No tenés acceso a la cerradura.</div>
+            ))
           :                         <Analytics    {...shared}/>}
       </main>
       <style>{`
@@ -4407,6 +4418,123 @@ function md5(str){
 }
 
 // ── ACCESOS · CERRADURA TTLOCK ───────────────────────────────────────────────
+// Opera vía /api/lock (servidor) — nunca tiene las credenciales. No abre/cierra la puerta ni toca config.
+function LockLite({ bookings=[], db }){
+  const [status,setStatus]=useState(null);
+  const [records,setRecords]=useState([]);
+  const [pins,setPins]=useState([]);
+  const [loading,setLoading]=useState("");
+  const [sel,setSel]=useState("");
+  const confirmadas = bookings.filter(b=>b.status==="confirmed");
+  async function api(action,params){
+    const idToken = await auth.currentUser.getIdToken();
+    const r = await fetch("/api/lock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idToken,action,params})});
+    return r.json();
+  }
+  async function cargarPins(){ try{ const snap=await getDocs(collection(db,"re_lockpins")); setPins(snap.docs.map(d=>({...d.data(),id:d.id}))); }catch(e){} }
+  useEffect(()=>{ cargarPins(); },[]);
+  async function verEstado(){ setLoading("status"); try{ const d=await api("status",{}); if(d.error) throw new Error(d.error); setStatus(d);}catch(e){alert("Error: "+e.message);}finally{setLoading("");} }
+  async function verAccesos(){ setLoading("records"); try{ const d=await api("records",{}); if(d.error) throw new Error(d.error); setRecords(d.list||[]);}catch(e){alert("Error: "+e.message);}finally{setLoading("");} }
+  async function generar(){
+    const b=confirmadas.find(x=>x.id===sel); if(!b){ alert("Elegí una reserva"); return; }
+    setLoading("pin");
+    try{
+      const startDate=new Date((b.checkIn||"")+"T14:00").getTime();
+      const endDate=new Date((b.checkOut||"")+"T11:00").getTime();
+      const d=await api("createGuestPin",{nombre:b.guestName||"Huésped",startDate,endDate});
+      if(d.error || (d.errcode && d.errcode!==0 && !d.keyboardPwdId)) throw new Error(d.error||d.errmsg||("error "+d.errcode));
+      const entry={ nombre:b.guestName||"Huésped", codigo:String(d.keyboardPwd), keyboardPwdId:d.keyboardPwdId||null, inicio:b.checkIn||"", fin:b.checkOut||"", createdAt:new Date().toISOString() };
+      await addDoc(collection(db,"re_lockpins"),entry);
+      await cargarPins();
+      alert("✅ Código generado para "+entry.nombre+": "+entry.codigo);
+    }catch(e){ alert("No se pudo generar: "+e.message); }
+    finally{ setLoading(""); }
+  }
+  async function borrar(pin){
+    if(!confirm("¿Eliminar el código de "+pin.nombre+"?")) return;
+    try{
+      if(pin.keyboardPwdId){ const d=await api("deletePin",{keyboardPwdId:pin.keyboardPwdId}); if(d.error) throw new Error(d.error); if(d.errcode&&d.errcode!==0) throw new Error(d.errmsg||("error "+d.errcode)); }
+      await deleteDoc(doc(db,"re_lockpins",pin.id));
+      await cargarPins();
+    }catch(e){ alert("Error al borrar: "+e.message); }
+  }
+  const RT={1:"App",4:"Código",7:"Tarjeta",8:"Huella",55:"Remoto"};
+  return (
+    <div style={{animation:"fadeIn 0.25s ease"}}>
+      <div style={{marginBottom:24}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>🔑 Cerradura · Co-anfitrión</div>
+        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Códigos de acceso</h1>
+        <p style={{color:C.textSec,fontSize:13,marginTop:5}}>Generá códigos para tus reservas y mirá estado y accesos. (Abrir/cerrar y configuración: solo el propietario.)</p>
+      </div>
+      <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        <div style={S.card}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:14,fontWeight:700}}>Estado de la cerradura</div>
+            <button onClick={verEstado} disabled={loading==="status"} style={{...S.btnSec,fontSize:12}}>{loading==="status"?"...":"↻ Consultar"}</button>
+          </div>
+          {status ? (
+            <div style={{display:"flex",alignItems:"center",gap:14}}>
+              <div style={{fontSize:34}}>{status.state===0?"🔒":status.state===1?"🔓":"❓"}</div>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:status.state===0?C.green:C.yellow}}>{status.state===0?"Cerrada":status.state===1?"Abierta":"Sin datos"}</div>
+                {status.battery!=null&&<div style={{fontSize:12,color:C.textMuted}}>Batería: {status.battery}%</div>}
+              </div>
+            </div>
+          ) : <div style={{fontSize:13,color:C.textMuted}}>Tocá "Consultar" para ver el estado.</div>}
+        </div>
+        <div style={S.card}>
+          <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>Generar código de reserva</div>
+          <label style={S.label}>Reserva</label>
+          <select style={S.input} value={sel} onChange={e=>setSel(e.target.value)}>
+            <option value="">— Elegí una reserva —</option>
+            {confirmadas.map(b=><option key={b.id} value={b.id}>{b.guestName} · {b.checkIn} → {b.checkOut}</option>)}
+          </select>
+          <button onClick={generar} disabled={loading==="pin"} style={{...S.btnGreen,justifyContent:"center",width:"100%",marginTop:12}}>{loading==="pin"?"Generando...":"🔑 Generar código"}</button>
+        </div>
+      </div>
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Códigos generados ({pins.length})</div>
+        {pins.length===0 ? <div style={{fontSize:13,color:C.textMuted,textAlign:"center",padding:"20px 0"}}>Todavía no hay códigos.</div> : (
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {pins.map(pin=>(
+              <div key={pin.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",background:C.bg,borderRadius:10,boxShadow:C.shadowInset}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:600}}>{pin.nombre}</div>
+                  <div style={{fontSize:11,color:C.textMuted}}>{pin.inicio} → {pin.fin}</div>
+                </div>
+                <div style={{textAlign:"center",padding:"6px 12px",background:C.white,borderRadius:8,boxShadow:C.shadow}}>
+                  <div style={{fontSize:18,fontWeight:900,color:C.blue,letterSpacing:"2px"}}>{pin.codigo}</div>
+                </div>
+                <button onClick={()=>borrar(pin)} style={{background:C.redLight,border:"none",color:C.red,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>Eliminar</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={S.card}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:14,fontWeight:700}}>Registro de accesos</div>
+          <button onClick={verAccesos} disabled={loading==="records"} style={{...S.btnSec,fontSize:12}}>{loading==="records"?"...":"↻ Actualizar"}</button>
+        </div>
+        {records.length===0 ? <div style={{fontSize:13,color:C.textMuted,textAlign:"center",padding:"20px 0"}}>Tocá "Actualizar" para ver quién abrió y cuándo.</div> : (
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {records.map((r,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:C.bg,borderRadius:8,boxShadow:C.shadowInset}}>
+                <span style={{fontSize:16}}>{r.success===1||r.success===undefined?"🟢":"🔴"}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600}}>{r.username||r.keyboardPwdName||"—"}</div>
+                  <div style={{fontSize:11,color:C.textMuted}}>{r.lockDate?new Date(r.lockDate).toLocaleString("es-AR"):"—"}</div>
+                </div>
+                <span style={{fontSize:11,background:C.blueLight,color:C.blue,padding:"2px 8px",borderRadius:20,fontWeight:600}}>{RT[r.recordType]||("Tipo "+r.recordType)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Accesos({ properties, bookings, tc, db }) {
   const d2 = properties.find(p=>p.type==="short_term"||p.type==="temporal");
 
