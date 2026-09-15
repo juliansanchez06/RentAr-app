@@ -1,10 +1,12 @@
 // Endpoint SEGURO para operar la cerradura sin exponer las credenciales al navegador.
 // Las credenciales de TTLock viven en variables de entorno de Vercel.
-// Solo usuarios logueados y en la lista blanca pueden usarlo. Acciones limitadas:
-// status, records, createGuestPin, deletePin. (No abre/cierra la puerta.)
+// Solo usuarios logueados y autorizados pueden usarlo.
+//   - LOCK_ALLOWED_EMAILS: co-anfitriones (generar códigos, estado, accesos, borrar).
+//   - LOCK_OWNER_EMAILS:  propietarios (todo lo anterior + abrir/cerrar la puerta).
 import crypto from "crypto";
 
 const md5 = (s) => crypto.createHash("md5").update(String(s)).digest("hex");
+const parseList = (v) => (v || "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "Método no permitido" }); return; }
@@ -19,8 +21,13 @@ export default async function handler(req, res) {
     });
     const vd = await vr.json();
     const email = ((vd.users && vd.users[0] && vd.users[0].email) || "").toLowerCase();
-    const allow = (process.env.LOCK_ALLOWED_EMAILS || "").toLowerCase().split(",").map(x => x.trim()).filter(Boolean);
-    if (!email || (allow.length && !allow.includes(email))) { res.status(403).json({ error: "No autorizado" }); return; }
+    const owners = parseList(process.env.LOCK_OWNER_EMAILS);
+    const allowed = parseList(process.env.LOCK_ALLOWED_EMAILS);
+    const isOwner = owners.includes(email);
+    const authorized = !!email && (isOwner || allowed.includes(email));
+    if (!authorized) { res.status(403).json({ error: "No autorizado" }); return; }
+    // Abrir/cerrar la puerta: solo propietario
+    if ((action === "open" || action === "close") && !isOwner) { res.status(403).json({ error: "Solo el propietario puede abrir o cerrar la puerta" }); return; }
 
     // 2) Credenciales de TTLock (solo en el servidor)
     const clientId = process.env.TTLOCK_CLIENT_ID;
@@ -45,7 +52,7 @@ export default async function handler(req, res) {
     if (action === "status") {
       const s = await g("/lock/queryOpenState", {});
       let battery = null; try { const b = await g("/lock/queryElectricQuantity", {}); battery = b.electricQuantity; } catch (e) {}
-      out = { state: s.state, battery };
+      out = { state: s.state, battery, isOwner };
     } else if (action === "records") {
       out = await g("/lockRecord/list", { pageNo: 1, pageSize: 50 });
     } else if (action === "createGuestPin") {
@@ -54,6 +61,10 @@ export default async function handler(req, res) {
       out = { ...d, keyboardPwd: pin };
     } else if (action === "deletePin") {
       out = await p("/keyboardPwd/delete", { keyboardPwdId: params.keyboardPwdId, deleteType: 2 });
+    } else if (action === "open") {
+      out = await p("/lock/unlock", {});
+    } else if (action === "close") {
+      out = await p("/lock/lock", {});
     } else {
       res.status(400).json({ error: "Acción inválida" }); return;
     }
