@@ -495,7 +495,7 @@ export default function App() {
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
           : page==="transactions" ? <Transactions {...shared}/>
-          : page==="accesos"      ? (isLockOwner ? <LockLite {...shared} isOwner={true}/> : isLockUser ? <LockLite {...shared}/> : (
+          : page==="accesos"      ? (isLockOwner ? <Accesos {...shared}/> : isLockUser ? <LockLite {...shared}/> : (
               <div style={{padding:40,textAlign:"center",color:C.textSec}}>No tenés acceso a la cerradura.</div>
             ))
           :                         <Analytics    {...shared}/>}
