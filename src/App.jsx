@@ -495,7 +495,7 @@ export default function App() {
           : page==="bookings"     ? <Bookings     {...shared}/>
           : page==="movimientos"  ? <Movimientos  {...shared}/>
           : page==="transactions" ? <Transactions {...shared}/>
-          : page==="accesos"      ? (isLockOwner ? <Accesos {...shared}/> : isLockUser ? <LockLite {...shared}/> : (
+          : page==="accesos"      ? (isLockOwner ? <LockLite {...shared} isOwner={true}/> : isLockUser ? <LockLite {...shared}/> : (
               <div style={{padding:40,textAlign:"center",color:C.textSec}}>No tenés acceso a la cerradura.</div>
             ))
           :                         <Analytics    {...shared}/>}
@@ -4419,7 +4419,7 @@ function md5(str){
 
 // ── ACCESOS · CERRADURA TTLOCK ───────────────────────────────────────────────
 // Opera vía /api/lock (servidor) — nunca tiene las credenciales. No abre/cierra la puerta ni toca config.
-function LockLite({ bookings=[], db }){
+function LockLite({ bookings=[], db, isOwner=false }){
   const [status,setStatus]=useState(null);
   const [records,setRecords]=useState([]);
   const [pins,setPins]=useState([]);
@@ -4435,6 +4435,8 @@ function LockLite({ bookings=[], db }){
   useEffect(()=>{ cargarPins(); },[]);
   async function verEstado(){ setLoading("status"); try{ const d=await api("status",{}); if(d.error) throw new Error(d.error); setStatus(d);}catch(e){alert("Error: "+e.message);}finally{setLoading("");} }
   async function verAccesos(){ setLoading("records"); try{ const d=await api("records",{}); if(d.error) throw new Error(d.error); setRecords(d.list||[]);}catch(e){alert("Error: "+e.message);}finally{setLoading("");} }
+  async function abrir(){ if(!confirm("¿Abrir la puerta?")) return; setLoading("open"); try{ const d=await api("open",{}); if(d.error) throw new Error(d.error); if(d.errcode&&d.errcode!==0) throw new Error(d.errmsg||("error "+d.errcode)); setStatus(x=>({...(x||{}),state:1})); }catch(e){ alert("No se pudo abrir: "+e.message);}finally{setLoading("");} }
+  async function cerrar(){ if(!confirm("¿Cerrar la puerta?")) return; setLoading("close"); try{ const d=await api("close",{}); if(d.error) throw new Error(d.error); if(d.errcode&&d.errcode!==0) throw new Error(d.errmsg||("error "+d.errcode)); setStatus(x=>({...(x||{}),state:0})); }catch(e){ alert("No se pudo cerrar: "+e.message);}finally{setLoading("");} }
   async function generar(){
     const b=confirmadas.find(x=>x.id===sel); if(!b){ alert("Elegí una reserva"); return; }
     setLoading("pin");
@@ -4462,9 +4464,9 @@ function LockLite({ bookings=[], db }){
   return (
     <div style={{animation:"fadeIn 0.25s ease"}}>
       <div style={{marginBottom:24}}>
-        <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>🔑 Cerradura · Co-anfitrión</div>
-        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>Códigos de acceso</h1>
-        <p style={{color:C.textSec,fontSize:13,marginTop:5}}>Generá códigos para tus reservas y mirá estado y accesos. (Abrir/cerrar y configuración: solo el propietario.)</p>
+        <div style={{fontSize:11,fontWeight:700,color:C.blue,letterSpacing:"2px",textTransform:"uppercase",marginBottom:6}}>{isOwner?"🔒 Cerradura":"🔑 Cerradura · Co-anfitrión"}</div>
+        <h1 style={{fontSize:30,fontWeight:900,letterSpacing:"-0.8px",margin:0}}>{isOwner?"Cerradura":"Códigos de acceso"}</h1>
+        <p style={{color:C.textSec,fontSize:13,marginTop:5}}>{isOwner?"Controlá la puerta, generá códigos y mirá estado y accesos.":"Generá códigos para tus reservas y mirá estado y accesos. (Abrir/cerrar: solo el propietario.)"}</p>
       </div>
       <div className="grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
         <div style={S.card}>
@@ -4481,6 +4483,12 @@ function LockLite({ bookings=[], db }){
               </div>
             </div>
           ) : <div style={{fontSize:13,color:C.textMuted}}>Tocá "Consultar" para ver el estado.</div>}
+          {isOwner && (
+            <div style={{display:"flex",gap:8,marginTop:14}}>
+              <button onClick={abrir} disabled={loading==="open"} style={{...S.btnGreen,flex:1,justifyContent:"center"}}>{loading==="open"?"...":"🔓 Abrir"}</button>
+              <button onClick={cerrar} disabled={loading==="close"} style={{...S.btn,flex:1,justifyContent:"center"}}>{loading==="close"?"...":"🔒 Cerrar"}</button>
+            </div>
+          )}
         </div>
         <div style={S.card}>
           <div style={{fontSize:14,fontWeight:700,marginBottom:8}}>Generar código de reserva</div>
