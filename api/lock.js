@@ -15,7 +15,8 @@ export default async function handler(req, res) {
 
     // 1) Verificar que el que llama es un usuario logueado y autorizado
     const apiKey = process.env.FIREBASE_API_KEY;
-    if (!idToken || !apiKey) { res.status(401).json({ error: "Falta autenticación" }); return; }
+    if (!idToken) { res.status(401).json({ error: "No se recibió el token de sesión. Recargá la página e iniciá sesión de nuevo." }); return; }
+    if (!apiKey) { res.status(500).json({ error: "Falta la variable FIREBASE_API_KEY en Vercel (Settings → Environment Variables) y hacé Redeploy." }); return; }
     const vr = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }),
     });
