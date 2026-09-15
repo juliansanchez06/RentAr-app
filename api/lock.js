@@ -31,11 +31,11 @@ export default async function handler(req, res) {
     if ((action === "open" || action === "close") && !isOwner) { res.status(403).json({ error: "Solo el propietario puede abrir o cerrar la puerta" }); return; }
 
     // 2) Credenciales de TTLock (solo en el servidor)
-    const clientId = process.env.TTLOCK_CLIENT_ID;
-    const clientSecret = process.env.TTLOCK_CLIENT_SECRET;
-    const username = process.env.TTLOCK_USERNAME;
-    const password = md5(process.env.TTLOCK_PASSWORD || "");
-    const lockId = process.env.TTLOCK_LOCK_ID;
+    const clientId = (process.env.TTLOCK_CLIENT_ID || "").trim();
+    const clientSecret = (process.env.TTLOCK_CLIENT_SECRET || "").trim();
+    const username = (process.env.TTLOCK_USERNAME || "").trim();
+    const password = md5((process.env.TTLOCK_PASSWORD || "").trim());
+    const lockId = (process.env.TTLOCK_LOCK_ID || "").trim();
     if (!clientId || !username || !lockId) { res.status(500).json({ error: "Faltan variables de entorno de TTLock" }); return; }
 
     const tr = await fetch("https://euapi.ttlock.com/oauth2/token", {
