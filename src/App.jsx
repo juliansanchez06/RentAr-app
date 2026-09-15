@@ -4429,7 +4429,12 @@ function LockLite({ bookings=[], db, isOwner=false }){
   async function api(action,params){
     const idToken = await auth.currentUser.getIdToken();
     const r = await fetch("/api/lock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idToken,action,params})});
-    return r.json();
+    const txt = await r.text();
+    try { return JSON.parse(txt); }
+    catch(e) {
+      if (r.status===404) return { error:"El endpoint /api/lock no está publicado. Subí el archivo api/lock.js a GitHub y hacé Redeploy en Vercel." };
+      return { error:"Respuesta inesperada del servidor ("+r.status+"). Revisá que api/lock.js esté desplegado y las variables de entorno cargadas." };
+    }
   }
   async function cargarPins(){ try{ const snap=await getDocs(collection(db,"re_lockpins")); setPins(snap.docs.map(d=>({...d.data(),id:d.id}))); }catch(e){} }
   useEffect(()=>{ cargarPins(); },[]);
