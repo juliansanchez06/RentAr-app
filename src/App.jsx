@@ -2402,6 +2402,7 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
     setEditingId(p.id);
     setEditValues({
       estimatedValueUSD: p.estimatedValueUSD,
+      purchasePriceUSD:  p.purchasePriceUSD || 0,
       monthlyIncomeARS:  p.monthlyIncomeARS || 0,
       monthlyExpensesARS: p.monthlyExpensesARS || 0,
       status: p.status,
@@ -2479,8 +2480,9 @@ function Properties({ properties, transactions, tc, reload, db, pinnedValues, pi
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                       {[
                         {label:"Valor estimado (USD)", field:"estimatedValueUSD", prefix:"USD"},
+                        {label:"Precio de compra (USD)", field:"purchasePriceUSD", prefix:"USD"},
                         {label:"Ingreso mensual (ARS)", field:"monthlyIncomeARS", prefix:"$"},
-                        {label:"Egresos mensuales (ARS)", field:"monthlyExpensesARS", prefix:"$", hide:p.type==="fixed_rental"},
+                        {label:"Egresos mensuales (ARS)", field:"monthlyExpensesARS", prefix:"$"},
                       ].filter(x=>!x.hide).map(({label,field,prefix})=>(
                         <div key={field}>
                           <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4,fontWeight:500}}>{label}</div>
