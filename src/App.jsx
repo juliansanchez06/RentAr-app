@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Fragment } from "react";
 import { initializeApp, getApps } from "firebase/app";
 import {
   getFirestore, collection, getDocs, addDoc, deleteDoc, setDoc, updateDoc,
@@ -3950,6 +3950,44 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
   const _tempPorDeptoMes = (_tempPropsAn.length>0&&_mesesOpTemp>0) ? _totTempNetoUSD/_tempPropsAn.length/_mesesOpTemp : 0;
   const _fijaPorDeptoMes = (_fixedPropsAn.length>0&&_mesesOpFija>0) ? _totFijaNetoUSD/_fixedPropsAn.length/_mesesOpFija : 0;
   const _sinGastosFija = _fixedPropsAn.length>0 && _gastosFijaUSD<=0;
+  // ── Renta anual (%) en USD sobre lo que se pagó por cada depto ──────────
+  const _rentaPorProp = properties.filter(p=>_esTemp(p)||_esFija(p)).map(p=>{
+    const esT=_esTemp(p);
+    let brutoUSD=0, primerMes=-1;
+    if(esT){
+      const bksCob=bookings.filter(b=>b.cobrado&&b.propertyId===p.id);
+      const bksAct=bookings.filter(b=>b.status!=="cancelled"&&b.propertyId===p.id);
+      for(let m=0;m<12;m++){
+        const v=bksCob.reduce((s,b)=>s+montoMesUSD(b,chartYear,m,tc),0);
+        const n=bksAct.reduce((s,b)=>s+nochesEnMes(b,chartYear,m),0);
+        if((v>0||n>0)&&primerMes<0) primerMes=m;
+        brutoUSD+=v;
+      }
+    } else {
+      for(let m=0;m<12;m++){
+        const pre=chartYear+"-"+String(m+1).padStart(2,"0");
+        const v=transactions.filter(t=>t.type==="income"&&t.propertyId===p.id&&t.date&&t.date.startsWith(pre))
+                 .reduce((s,t)=>s+(Number(t.amountUSD||0)||arsToUsd(Number(t.amountARS||0),tc)),0);
+        if(v>0&&primerMes<0) primerMes=m;
+        brutoUSD+=v;
+      }
+    }
+    const meses = primerMes>=0 ? Math.max(1,_ultimoMesAn-primerMes+1) : 0;
+    const gastosMesUSD = esT
+      ? (_tempPropsAn.length>0 ? _gastosTempUSD/_tempPropsAn.length : 0)
+      : (tc>0 ? Number(p.monthlyExpensesARS||0)/tc : 0);
+    const netoUSD = brutoUSD - gastosMesUSD*meses;
+    const netoMes = meses>0 ? netoUSD/meses : 0;
+    const pagado  = Number(p.purchasePriceUSD||0);
+    return { id:p.id, name:p.name||"Depto", esT, pagado, brutoUSD, netoUSD, netoMes, meses,
+             rentaAnualPct: pagado>0 ? (netoMes*12)/pagado*100 : null };
+  }).sort((a,b)=>(b.rentaAnualPct==null?-1:b.rentaAnualPct)-(a.rentaAnualPct==null?-1:a.rentaAnualPct));
+  const _sinPrecioPagado = _rentaPorProp.some(r=>r.pagado<=0);
+  const _promRenta = (arr)=>{ const v=arr.filter(r=>r.rentaAnualPct!=null); return v.length? v.reduce((s,r)=>s+r.rentaAnualPct,0)/v.length : null; };
+  const _rentaPromTemp = _promRenta(_rentaPorProp.filter(r=>r.esT));
+  const _rentaPromFija = _promRenta(_rentaPorProp.filter(r=>!r.esT));
+  const _colRenta = (v)=> v==null?C.textMuted : v>=7?C.green : v>=4?C.yellow : C.red;
+
   const _ganaTemp = _tempPorDeptoMes>_fijaPorDeptoMes;
   const _difPorDepto = Math.abs(_tempPorDeptoMes-_fijaPorDeptoMes);
   const _mesesCumplidos = _histo.filter(h=>h.pct>=100).length;
@@ -4147,6 +4185,62 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
         </div>
         <div style={{marginTop:12,fontSize:11,color:C.textMuted,lineHeight:1.5}}>
           Temporal: lo cobrado ya viene neto de la comisión de plataforma; le descuento los gastos y la empleada que cargaste en Punto de Equilibrio. Renta mensual: los cobros registrados menos los gastos mensuales de la ficha de cada propiedad.
+        </div>
+      </div>
+
+      {/* 💵 Renta anual en USD sobre lo pagado */}
+      <div style={{...S.card, marginBottom:24}}>
+        <div style={{fontSize:15,fontWeight:700}}>💵 Renta anual en USD · {chartYear}</div>
+        <div style={{fontSize:12,color:C.textSec,marginBottom:14,marginTop:2}}>
+          Cuánto rinde al año cada depto sobre <strong>lo que pagaste</strong> por él, neto de gastos. Anualizado sobre los meses que lleva operando.
+        </div>
+
+        {(_rentaPromTemp!=null||_rentaPromFija!=null)&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+            <div style={{background:C.bg,borderRadius:12,padding:12,boxShadow:C.shadowInset}}>
+              <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>🏖️ Temporal</div>
+              <div style={{fontSize:22,fontWeight:900,color:_colRenta(_rentaPromTemp),marginTop:2}}>{_rentaPromTemp!=null?fPct(_rentaPromTemp):"—"}</div>
+              <div style={{fontSize:11,color:C.textSec}}>renta anual promedio</div>
+            </div>
+            <div style={{background:C.bg,borderRadius:12,padding:12,boxShadow:C.shadowInset}}>
+              <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.3px"}}>🏠 Renta mensual</div>
+              <div style={{fontSize:22,fontWeight:900,color:_colRenta(_rentaPromFija),marginTop:2}}>{_rentaPromFija!=null?fPct(_rentaPromFija):"—"}</div>
+              <div style={{fontSize:11,color:C.textSec}}>renta anual promedio</div>
+            </div>
+          </div>
+        )}
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 96px 92px 84px",gap:8,alignItems:"center",fontSize:12}}>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase"}}>Departamento</div>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Pagado</div>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Neto/mes</div>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Renta anual</div>
+          {_rentaPorProp.map(r=>(
+            <Fragment key={r.id}>
+              <div style={{paddingTop:7,borderTop:"1px solid "+C.border}}>
+                <div style={{fontWeight:600,color:C.text}}>{r.name}</div>
+                <div style={{fontSize:10,color:C.textMuted}}>{r.esT?"🏖️ Temporal":"🏠 Mensual"} · {r.meses} {r.meses===1?"mes":"meses"}</div>
+              </div>
+              <div style={{textAlign:"right",paddingTop:7,borderTop:"1px solid "+C.border,color:r.pagado>0?C.text:C.textMuted}}>
+                {r.pagado>0?fUSD(r.pagado):"sin cargar"}
+              </div>
+              <div style={{textAlign:"right",paddingTop:7,borderTop:"1px solid "+C.border,fontWeight:600,color:r.netoMes>=0?C.text:C.red}}>
+                {fUSD(r.netoMes)}
+              </div>
+              <div style={{textAlign:"right",paddingTop:7,borderTop:"1px solid "+C.border,fontWeight:800,color:_colRenta(r.rentaAnualPct)}}>
+                {r.rentaAnualPct!=null?fPct(r.rentaAnualPct):"—"}
+              </div>
+            </Fragment>
+          ))}
+        </div>
+
+        {_sinPrecioPagado&&(
+          <div style={{marginTop:14,background:C.yellowLight,borderRadius:10,padding:"10px 12px",fontSize:12,color:C.yellow,lineHeight:1.5}}>
+            ⚠️ Hay deptos sin el <strong>precio de compra</strong> cargado, así que no puedo calcularles la renta. Completalo en Propiedades → editar → Precio de compra (USD).
+          </div>
+        )}
+        <div style={{marginTop:12,fontSize:11,color:C.textMuted,lineHeight:1.5}}>
+          Se calcula: (neto por mes × 12) ÷ lo que pagaste. Como referencia, un alquiler en Argentina suele rendir entre 3% y 6% anual en dólares; arriba de 7% es muy bueno. No incluye la revalorización del inmueble, que va aparte en la pestaña de Revalorización.
         </div>
       </div>
 
@@ -5202,4 +5296,3 @@ function Accesos({ properties, bookings, tc, db }) {
     </div>
   );
 }
-
