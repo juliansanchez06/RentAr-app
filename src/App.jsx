@@ -3876,7 +3876,7 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
   const [anosVenta,setAnosVenta]   = useState(10); // en cuántos años se vende
 
   // ── Gráficos: recaudado mensual vs dólar ───────────────────────────────
-  const chartYear = new Date().getFullYear();
+  const [chartYear,setChartYear] = useState(new Date().getFullYear());
   const MESES_CH = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const fixedIds = properties.filter(p=>p.type==="fixed_rental"||p.type==="fija").map(p=>p.id);
   const recTemporal = Array(12).fill(0);
@@ -3899,8 +3899,57 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
       setDolarSerie(bm); setDolarMsg("");
     }catch(e){ setDolarSerie(null); setDolarMsg("No se pudo traer el dólar online — se usa el de tus cobros."); }
   }
-  useEffect(()=>{ cargarDolar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },[]);
+  useEffect(()=>{ cargarDolar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },[chartYear]);
   const dolarFinal = dolarSerie || dolarOwn;
+
+  // ── Histórico de metas + comparación temporal vs renta mensual ──────────
+  const _esTemp  = (p)=>["short_term","short-term","temporal"].includes(p.type);
+  const _esFija  = (p)=>["fixed_rental","fija"].includes(p.type);
+  const _tempPropsAn  = properties.filter(_esTemp);
+  const _fixedPropsAn = properties.filter(_esFija);
+  const _fixedIdsAn   = _fixedPropsAn.map(p=>p.id);
+
+  // Meta mensual del temporal = ganancia deseada + gastos (incluye empleada)
+  const _metaGananciaUSD = Number(pinnedValues?.targetGanancia||200);
+  const _gastosTempUSD = (()=>{
+    let g=0;
+    try{ const arr=JSON.parse(pinnedValues?.gastos||"[]"); g=arr.reduce((s,x)=>s+(x.moneda==="USD"?Number(x.monto||0):(tc>0?Number(x.monto||0)/tc:0)),0); }catch(e){}
+    const sueldo=Number(pinnedValues?.sueldoEmpleada||0), cargas=Number(pinnedValues?.cargasMonto||0);
+    const empleada = sueldo + cargas + sueldo/12;
+    return g + (tc>0 ? empleada/tc : 0);
+  })();
+  const _metaTotalUSD = _metaGananciaUSD + _gastosTempUSD;
+  // Gastos mensuales de la renta fija (de la ficha de cada propiedad)
+  const _gastosFijaUSD = _fixedPropsAn.reduce((s,p)=>s+(tc>0?Number(p.monthlyExpensesARS||0)/tc:0),0);
+
+  // Mes a mes del año elegido
+  const _histo = Array.from({length:12},(_,m)=>{
+    const pre = chartYear+"-"+String(m+1).padStart(2,"0");
+    const cobradoUSD = bookings.filter(b=>b.cobrado).reduce((s,b)=>s+montoMesUSD(b,chartYear,m,tc),0);
+    const noches     = bookings.filter(b=>b.status!=="cancelled").reduce((s,b)=>s+nochesEnMes(b,chartYear,m),0);
+    const diasMes    = new Date(chartYear,m+1,0).getDate();
+    const fijaUSD    = transactions.filter(t=>t.type==="income"&&t.date&&t.date.startsWith(pre)&&(_fixedIdsAn.length===0||_fixedIdsAn.includes(t.propertyId)))
+                        .reduce((s,t)=>s+(Number(t.amountUSD||0)||arsToUsd(Number(t.amountARS||0),tc)),0);
+    return { m, cobradoUSD, noches, diasMes,
+             ocupPct: diasMes>0?Math.min(100,Math.round(noches/diasMes*100)):0,
+             fijaUSD, netoTempUSD: cobradoUSD-_gastosTempUSD, netoFijaUSD: fijaUSD-_gastosFijaUSD,
+             pct: _metaTotalUSD>0?Math.round(cobradoUSD/_metaTotalUSD*100):0 };
+  });
+
+  const _hoyAn = new Date();
+  const _esAnioActual = chartYear===_hoyAn.getFullYear();
+  const _mesesTranscurridos = _esAnioActual ? _hoyAn.getMonth()+1 : 12;
+  const _totTempBrutoUSD = _histo.reduce((s,h)=>s+h.cobradoUSD,0);
+  const _totFijaBrutoUSD = _histo.reduce((s,h)=>s+h.fijaUSD,0);
+  const _totTempNetoUSD  = _totTempBrutoUSD - _gastosTempUSD*_mesesTranscurridos;
+  const _totFijaNetoUSD  = _totFijaBrutoUSD - _gastosFijaUSD*_mesesTranscurridos;
+  const _tempPorDeptoMes = (_tempPropsAn.length>0&&_mesesTranscurridos>0) ? _totTempNetoUSD/_tempPropsAn.length/_mesesTranscurridos : 0;
+  const _fijaPorDeptoMes = (_fixedPropsAn.length>0&&_mesesTranscurridos>0) ? _totFijaNetoUSD/_fixedPropsAn.length/_mesesTranscurridos : 0;
+  const _ganaTemp = _tempPorDeptoMes>_fijaPorDeptoMes;
+  const _difPorDepto = Math.abs(_tempPorDeptoMes-_fijaPorDeptoMes);
+  const _mesesCumplidos = _histo.filter(h=>h.pct>=100).length;
+  const _mesesConActividad = _histo.filter(h=>h.noches>0||h.cobradoUSD>0).length;
+
 
   const props    = propId==="all" ? properties : properties.filter(p=>p.id===propId);
   const txs      = propId==="all" ? transactions : transactions.filter(t=>t.propertyId===propId);
@@ -3995,6 +4044,99 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
             <input type="number" min={5} max={40} value={years} onChange={e=>setYears(Number(e.target.value))} style={{...S.input,width:65,textAlign:"center"}}/>
             <PinBtn pinKey="projYears" value={years} pinnedValues={pinnedValues} pinValue={pinValue}/>
           </div>
+        </div>
+      </div>
+
+      {/* 🎯 Metas mes a mes */}
+      <div style={{...S.card, marginBottom:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10,marginBottom:6}}>
+          <div style={{maxWidth:520}}>
+            <div style={{fontSize:15,fontWeight:700}}>🎯 Metas mes a mes · {chartYear}</div>
+            <div style={{fontSize:12,color:C.textSec,marginTop:2}}>Lo cobrado de renta temporal contra tu meta de <strong>{fUSD(_metaTotalUSD)}</strong>/mes (ganancia {fUSD(_metaGananciaUSD)} + gastos {fUSD(_gastosTempUSD)}).</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <button onClick={()=>setChartYear(y=>y-1)} style={{...S.btnSec,padding:"6px 12px"}}>‹</button>
+            <span style={{fontSize:14,fontWeight:800,minWidth:52,textAlign:"center"}}>{chartYear}</span>
+            <button onClick={()=>setChartYear(y=>y+1)} disabled={chartYear>=new Date().getFullYear()}
+              style={{...S.btnSec,padding:"6px 12px",opacity:chartYear>=new Date().getFullYear()?0.4:1}}>›</button>
+          </div>
+        </div>
+
+        <div style={{fontSize:12,color:C.textSec,marginBottom:12}}>
+          <strong style={{color:_mesesCumplidos>0?C.green:C.textSec}}>{_mesesCumplidos}</strong> de {_mesesConActividad} meses con actividad llegaron a la meta.
+        </div>
+
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {_histo.map(h=>{
+            const col = h.pct>=100?C.green:h.pct>=60?C.yellow:h.pct>0?C.red:C.textMuted;
+            const vacio = h.noches===0 && h.cobradoUSD===0;
+            return (
+              <div key={h.m} style={{display:"grid",gridTemplateColumns:"44px 1fr 92px 46px",gap:8,alignItems:"center",opacity:vacio?0.4:1}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.text}}>{MESES_CH[h.m]}</div>
+                <div>
+                  <div style={{width:"100%",height:8,background:C.bg,borderRadius:4,overflow:"hidden",boxShadow:C.shadowInset}}>
+                    <div style={{width:Math.min(100,h.pct)+"%",height:"100%",background:col,borderRadius:4,transition:"width 0.4s"}}/>
+                  </div>
+                  <div style={{fontSize:10,color:C.textMuted,marginTop:3}}>{h.noches} noches · {h.ocupPct}% ocupación</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:col,textAlign:"right"}}>{fUSD(h.cobradoUSD)}</div>
+                <div style={{fontSize:12,fontWeight:800,color:col,textAlign:"right"}}>{h.pct}%</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{marginTop:12,fontSize:11,color:C.textMuted,lineHeight:1.5}}>
+          Las estadías que cruzan meses se reparten según las noches que caen en cada uno. Se cuenta solo lo marcado como cobrado; si ves noches con monto en cero, esa reserva todavía no está marcada. La meta es la actual, aplicada a todo el año.
+        </div>
+      </div>
+
+      {/* ⚖️ Temporal vs Renta mensual */}
+      <div style={{...S.card, marginBottom:24}}>
+        <div style={{fontSize:15,fontWeight:700}}>⚖️ Temporal vs Renta mensual · {chartYear}</div>
+        <div style={{fontSize:12,color:C.textSec,marginBottom:14,marginTop:2}}>Ingreso <strong>neto de gastos</strong>, en dólares. Sobre {_mesesTranscurridos} {_mesesTranscurridos===1?"mes":"meses"}.</div>
+
+        <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Promedio por departamento, por mes</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:12}}>
+          <div style={{background:_ganaTemp?C.greenLight:C.bg,borderRadius:12,padding:14,boxShadow:_ganaTemp?"none":C.shadowInset}}>
+            <div style={{fontSize:11,fontWeight:700,color:_ganaTemp?C.green:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px"}}>🏖️ Temporal{_ganaTemp?" · mejor":""}</div>
+            <div style={{fontSize:22,fontWeight:900,color:_ganaTemp?C.green:C.text,marginTop:3}}>{fUSD(_tempPorDeptoMes)}</div>
+            <div style={{fontSize:11,color:C.textSec}}>por depto / mes · {_tempPropsAn.length} {_tempPropsAn.length===1?"depto":"deptos"}</div>
+          </div>
+          <div style={{background:!_ganaTemp?C.greenLight:C.bg,borderRadius:12,padding:14,boxShadow:!_ganaTemp?"none":C.shadowInset}}>
+            <div style={{fontSize:11,fontWeight:700,color:!_ganaTemp?C.green:C.textMuted,textTransform:"uppercase",letterSpacing:"0.3px"}}>🏠 Renta mensual{!_ganaTemp?" · mejor":""}</div>
+            <div style={{fontSize:22,fontWeight:900,color:!_ganaTemp?C.green:C.text,marginTop:3}}>{fUSD(_fijaPorDeptoMes)}</div>
+            <div style={{fontSize:11,color:C.textSec}}>por depto / mes · {_fixedPropsAn.length} {_fixedPropsAn.length===1?"depto":"deptos"}</div>
+          </div>
+        </div>
+
+        <div style={{background:C.blueLight,borderRadius:10,padding:"10px 12px",fontSize:12,color:C.blue,marginBottom:18,lineHeight:1.5}}>
+          {(_tempPropsAn.length===0||_fixedPropsAn.length===0)
+            ? "Para comparar necesitás al menos un depto de cada tipo cargado en Propiedades."
+            : (_tempPorDeptoMes===0&&_fijaPorDeptoMes===0)
+              ? "Todavía no hay datos suficientes en este año para comparar."
+              : `Un depto en ${_ganaTemp?"temporal":"renta mensual"} te deja ${fUSD(_difPorDepto)} más por mes que en ${_ganaTemp?"renta mensual":"temporal"} — unos ${fUSD(_difPorDepto*12)} al año.`}
+        </div>
+
+        <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Totales del año</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 108px 108px",gap:8,fontSize:12,alignItems:"center"}}>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase"}}>Concepto</div>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Temporal</div>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",textAlign:"right"}}>Mensual</div>
+
+          <div style={{color:C.textSec}}>Ingresos cobrados</div>
+          <div style={{textAlign:"right",fontWeight:600}}>{fUSD(_totTempBrutoUSD)}</div>
+          <div style={{textAlign:"right",fontWeight:600}}>{fUSD(_totFijaBrutoUSD)}</div>
+
+          <div style={{color:C.textSec}}>Gastos ({_mesesTranscurridos} m)</div>
+          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosTempUSD*_mesesTranscurridos)}</div>
+          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosFijaUSD*_mesesTranscurridos)}</div>
+
+          <div style={{fontWeight:800,color:C.text,paddingTop:7,borderTop:"1px solid "+C.border}}>Neto</div>
+          <div style={{textAlign:"right",fontWeight:800,paddingTop:7,borderTop:"1px solid "+C.border,color:_totTempNetoUSD>=0?C.green:C.red}}>{fUSD(_totTempNetoUSD)}</div>
+          <div style={{textAlign:"right",fontWeight:800,paddingTop:7,borderTop:"1px solid "+C.border,color:_totFijaNetoUSD>=0?C.green:C.red}}>{fUSD(_totFijaNetoUSD)}</div>
+        </div>
+        <div style={{marginTop:12,fontSize:11,color:C.textMuted,lineHeight:1.5}}>
+          Temporal: lo cobrado ya viene neto de la comisión de plataforma; le descuento los gastos y la empleada que cargaste en Punto de Equilibrio. Renta mensual: los cobros registrados menos los gastos mensuales de la ficha de cada propiedad.
         </div>
       </div>
 
