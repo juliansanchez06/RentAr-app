@@ -27,6 +27,37 @@ const fUSD = (n) => "USD " + Math.round(n||0).toLocaleString("es-AR");
 const fPct = (n) => (n||0).toFixed(1) + "%";
 const arsToUsd = (ars,tc) => tc>0 ? Math.round((ars/tc)*100)/100 : 0;
 const todayStr = () => new Date().toISOString().split("T")[0];
+
+// ── Reparto de una reserva entre los meses que ocupa ───────────────────────
+// Una estadía larga (ej. 20/oct → 20/nov) se divide según las noches que caen
+// en cada mes, en lugar de imputarse entera al mes del check-in.
+const _dLocal = (s) => { if(!s) return null; const d=new Date(String(s).slice(0,10)+"T00:00:00"); return isNaN(d)?null:d; };
+const nochesTotales = (b) => {
+  const n = Number(b?.nights||0);
+  if (n>0) return n;
+  const ci=_dLocal(b?.checkIn), co=_dLocal(b?.checkOut);
+  if(!ci||!co) return 0;
+  return Math.max(0, Math.round((co-ci)/86400000));
+};
+const nochesEnMes = (b, year, mes) => {            // mes: 0-11
+  const ci=_dLocal(b?.checkIn), co=_dLocal(b?.checkOut);
+  if(!ci||!co) return 0;
+  const ini=new Date(year,mes,1), fin=new Date(year,mes+1,1);
+  const desde = ci>ini?ci:ini, hasta = co<fin?co:fin;
+  return hasta>desde ? Math.round((hasta-desde)/86400000) : 0;
+};
+const tocaMes = (b, year, mes) => nochesEnMes(b,year,mes) > 0;
+const fraccionMes = (b, year, mes) => {
+  const tot = nochesTotales(b);
+  if (tot<=0) { const ci=_dLocal(b?.checkIn); return (ci && ci.getFullYear()===year && ci.getMonth()===mes) ? 1 : 0; }
+  return nochesEnMes(b,year,mes)/tot;
+};
+const montoMesARS = (b, year, mes) => Number(b?.totalNetoARS||b?.totalARS||0) * fraccionMes(b,year,mes);
+const montoMesUSD = (b, year, mes, tc) => {
+  const usd = Number(b?.totalUSD||0) || arsToUsd(Number(b?.totalNetoARS||b?.totalARS||0), tc);
+  return usd * fraccionMes(b,year,mes);
+};
+
 const MONTHS_FULL = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MONTHS_SHORT = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const DAYS = ["D","L","M","X","J","V","S"];
@@ -938,10 +969,10 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
           {/* Reservas activas del mes */}
           <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",marginBottom:12,boxShadow:C.shadowInset}}>
             <div style={{fontSize:11,color:C.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Reservas este mes</div>
-            {bookings.filter(b=>b.status==="confirmed"&&new Date(b.checkIn).getMonth()===now.getMonth()).length===0?(
+            {bookings.filter(b=>b.status==="confirmed"&&tocaMes(b,now.getFullYear(),now.getMonth())).length===0?(
               <div style={{fontSize:12,color:C.textMuted,textAlign:"center",padding:"8px 0"}}>Sin reservas confirmadas</div>
             ):(
-              bookings.filter(b=>b.status==="confirmed"&&new Date(b.checkIn).getMonth()===now.getMonth()).map(b=>(
+              bookings.filter(b=>b.status==="confirmed"&&tocaMes(b,now.getFullYear(),now.getMonth())).map(b=>(
                 <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <div>
                     <div style={{fontSize:12,fontWeight:600}}>{b.guestName}</div>
@@ -977,8 +1008,8 @@ function Dashboard({ properties, transactions, bookings, tc, pinnedValues, pinVa
             const metaD=pinnedValues?.targetGanancia||200;
             const gastosD=pinnedValues?.gastos?(()=>{try{const g=JSON.parse(pinnedValues.gastos);return g.reduce((s,x)=>s+(x.moneda==="USD"?x.monto:x.monto/tc),0);}catch{return 56;}})():56;
             const metaTotD=metaD+gastosD;
-            const reservasMesD=bookings.filter(b=>{const ci=new Date(b.checkIn);return b.status==="confirmed"&&ci.getMonth()===nowD.getMonth()&&ci.getFullYear()===nowD.getFullYear();});
-            const recaudD=reservasMesD.reduce((s,b)=>s+(b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)),0);
+            const reservasMesD=bookings.filter(b=>b.status==="confirmed"&&tocaMes(b,nowD.getFullYear(),nowD.getMonth()));
+            const recaudD=reservasMesD.reduce((s,b)=>s+montoMesUSD(b,nowD.getFullYear(),nowD.getMonth(),tc),0);
             const faltaD=Math.max(0,metaTotD-recaudD);
             const pctD=Math.min(100,Math.round(recaudD/metaTotD*100));
             const colD=pctD>=100?C.green:pctD>=60?C.yellow:C.red;
@@ -1313,7 +1344,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   // Empleada doméstica: sueldo + cargas sociales + aguinaldo prorrateado (1/12) = costo mensual
   const costoEmpleadaMensual = Math.round(Number(sueldoEmpleada||0) + Number(cargasMonto||0) + Number(sueldoEmpleada||0)/12);
   const [_liqY,_liqM] = (mesLiq||"").split("-").map(Number);
-  const reservasMesActual = (bookings||[]).filter(b=>{ if(b.status!=="confirmed"||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; }).length;
+  const reservasMesActual = (bookings||[]).filter(b=> b.status==="confirmed" && tocaMes(b,_liqY,_liqM-1)).length;
   const _mesNombre = (()=>{ try{ return new Date(_liqY,(_liqM||1)-1,1).toLocaleDateString("es-AR",{month:"long",year:"numeric"}); }catch(e){ return mesLiq; } })();
   const empleadaPorReserva = reservasMesActual>0 ? Math.round(costoEmpleadaMensual/reservasMesActual) : costoEmpleadaMensual;
   const sumaGastosARS  = gastos.reduce((s,g)=>s+gastoEnARS(g),0);
@@ -1330,8 +1361,9 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   const _propNameEq = (id)=> (properties.find(p=>p.id===id)?.name) || "Depto";
   const _srcLabelEq = (s)=> ({direct:"Directa",airbnb:"Airbnb",booking:"Booking",other:"Otra"}[s]||s||"—");
   // Reservas cobradas del mes elegido (todas las propiedades)
-  const reservasCobradasCierre = (bookings||[]).filter(b=>{ if(!b.cobrado||!b.checkIn) return false; const d=new Date(b.checkIn); return (d.getMonth()+1)===_liqM && d.getFullYear()===_liqY; })
-    .map(b=>({ guestName:b.guestName||"—", propertyId:b.propertyId, propertyName:_propNameEq(b.propertyId), source:b.source, sourceLabel:_srcLabelEq(b.source), nights:b.nights||0, checkIn:b.checkIn, checkOut:b.checkOut, brutoARS:Number(b.totalARS||0), netoARS:Number(b.totalNetoARS||b.totalARS||0), comisionARS:Number(b.comisionARS||0) }));
+  const reservasCobradasCierre = (bookings||[]).filter(b=> b.cobrado && tocaMes(b,_liqY,_liqM-1))
+    .map(b=>{ const nMes=nochesEnMes(b,_liqY,_liqM-1), nTot=nochesTotales(b), f=fraccionMes(b,_liqY,_liqM-1);
+      return { guestName:b.guestName||"—", propertyId:b.propertyId, propertyName:_propNameEq(b.propertyId), source:b.source, sourceLabel:_srcLabelEq(b.source), nights:nMes, nightsTotal:nTot, parcial:nMes<nTot, checkIn:b.checkIn, checkOut:b.checkOut, brutoARS:Math.round(Number(b.totalARS||0)*f), netoARS:Math.round(Number(b.totalNetoARS||b.totalARS||0)*f), comisionARS:Math.round(Number(b.comisionARS||0)*f) }; });
   const ingresoTempNetoARS = reservasCobradasCierre.reduce((s,r)=>s+r.netoARS,0);
   // Renta fija cobrada del mes (transactions income de ese mes)
   const rentaFijaCierre = (transactions||[]).filter(t=>t.type==="income" && t.date && t.date.startsWith(mesLiq))
@@ -1382,7 +1414,7 @@ function Equilibrio({ tc, properties=[], bookings=[], transactions=[], pinnedVal
   function exportarCierrePDF(c){
     const f=(n)=>"$"+Math.round(n||0).toLocaleString("es-AR");
     const u=(n)=>"USD "+Math.round(n||0).toLocaleString("es-AR");
-    const rows=(c.reservas||[]).map(r=>`<tr><td>${r.guestName}</td><td>${r.propertyName}</td><td>${r.sourceLabel||r.source||""}</td><td style="text-align:center">${r.nights}</td><td>${(r.checkIn||"")} → ${(r.checkOut||"")}</td><td style="text-align:right">${f(r.netoARS)}</td></tr>`).join("");
+    const rows=(c.reservas||[]).map(r=>`<tr><td>${r.guestName}</td><td>${r.propertyName}</td><td>${r.sourceLabel||r.source||""}</td><td style="text-align:center">${r.nights}${r.parcial?` <span style="color:#94a3b8">de ${r.nightsTotal}</span>`:""}</td><td>${(r.checkIn||"")} → ${(r.checkOut||"")}</td><td style="text-align:right">${f(r.netoARS)}</td></tr>`).join("");
     const fijaRows=(c.rentaFija||[]).map(t=>`<tr><td>Renta fija</td><td>${t.propertyName}</td><td>—</td><td></td><td>${t.date}</td><td style="text-align:right">${f(t.amountARS)}</td></tr>`).join("");
     const gastoRows=(c.gastos||[]).map(g=>`<tr><td>${g.nombre}</td><td style="text-align:right">${f(g.ars)}${g.moneda==="USD"?` <span style="color:#94a3b8">(USD ${g.monto})</span>`:""}</td></tr>`).join("");
     const emp=c.empleada||{};
@@ -2740,8 +2772,9 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
     } catch(e) { alert("Error al eliminar: " + e.message); }
   }
 
-  const monthIncome=bookings.filter(b=>b.propertyId===propId&&b.status!=="cancelled"&&new Date(b.checkIn).getMonth()===month).reduce((s,b)=>s+(b.totalNetoARS||b.totalARS||0),0);
-  const occupiedNights=Object.values(occupiedMap).filter(b=>b.status!=="blocked"&&new Date(b.checkIn).getMonth()===month).length;
+  const monthIncome=bookings.filter(b=>b.propertyId===propId&&b.status!=="cancelled").reduce((s,b)=>s+montoMesARS(b,year,month),0);
+  const _mesPrefijo=year+"-"+String(month+1).padStart(2,"0");
+  const occupiedNights=Object.entries(occupiedMap).filter(([ds,b])=>b.status!=="blocked"&&ds.startsWith(_mesPrefijo)).length;
 
   // ── SEMÁFORO DE META ──────────────────────────────────────────────────────
   const now2 = new Date();
@@ -2758,18 +2791,15 @@ function Bookings({ properties, bookings, tc, reload, db, setPage, pinnedValues 
   const metaTotalUSD = metaUSD + gastosUSD2;
 
   // Reservas confirmadas este mes
-  const reservasMes = bookings.filter(b=>{
-    const ci = new Date(b.checkIn);
-    return b.status==="confirmed" && ci.getMonth()===mesActual && ci.getFullYear()===anioActual;
-  });
+  const reservasMes = bookings.filter(b=> b.status==="confirmed" && tocaMes(b, anioActual, mesActual));
 
-  const recaudadoUSD = reservasMes.reduce((s,b)=>s + (b.totalUSD||arsToUsd(b.totalNetoARS||b.totalARS||0,tc)), 0);
+  const recaudadoUSD = reservasMes.reduce((s,b)=>s + montoMesUSD(b, anioActual, mesActual, tc), 0);
   const faltaUSD = Math.max(0, metaTotalUSD - recaudadoUSD);
   const pctMeta = Math.min(100, Math.round(recaudadoUSD/metaTotalUSD*100));
-  const nochesConfirmadas = reservasMes.reduce((s,b)=>s+(b.nights||0),0);
+  const nochesConfirmadas = reservasMes.reduce((s,b)=>s+nochesEnMes(b, anioActual, mesActual),0);
 
   // Sugerencias para llegar a la meta
-  const precioPromedioActual = nochesConfirmadas>0 ? reservasMes.reduce((s,b)=>s+(b.precioNocheUsado||arsToUsd(b.totalARS||0,tc)/Math.max(b.nights||1,1)),0)/reservasMes.length : 0;
+  const precioPromedioActual = nochesConfirmadas>0 ? recaudadoUSD/nochesConfirmadas : 0;
   const nochesNecesariasExtra = faltaUSD>0 && precioPromedioActual>0 ? Math.ceil(faltaUSD/precioPromedioActual) : 0;
   const precioNecesario = faltaUSD>0 && diasRestantes>0 ? Math.ceil(faltaUSD/Math.max(diasRestantes/2,1)) : 0;
   const semaforoColor = pctMeta>=100?C.green:pctMeta>=60?C.yellow:C.red;
@@ -3850,7 +3880,7 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
   const MESES_CH = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const fixedIds = properties.filter(p=>p.type==="fixed_rental"||p.type==="fija").map(p=>p.id);
   const recTemporal = Array(12).fill(0);
-  bookings.forEach(b=>{ if(b.cobrado && b.checkIn){ const d=new Date(b.checkIn); if(d.getFullYear()===chartYear) recTemporal[d.getMonth()]+=(b.totalNetoARS||b.totalARS||0); } });
+  bookings.forEach(b=>{ if(!b.cobrado||!b.checkIn) return; for(let m=0;m<12;m++){ const amt=montoMesARS(b,chartYear,m); if(amt>0) recTemporal[m]+=amt; } });
   const recMensual = Array(12).fill(0);
   transactions.forEach(t=>{ if(t.type==="income" && t.date && t.date.startsWith(String(chartYear)) && (fixedIds.length===0 || fixedIds.includes(t.propertyId))){ const m=Number(t.date.slice(5,7))-1; if(m>=0&&m<12) recMensual[m]+=(t.amountARS||0); } });
   const dolarOwn = Array(12).fill(null);
