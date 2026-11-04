@@ -33,11 +33,10 @@ const todayStr = () => new Date().toISOString().split("T")[0];
 // en cada mes, en lugar de imputarse entera al mes del check-in.
 const _dLocal = (s) => { if(!s) return null; const d=new Date(String(s).slice(0,10)+"T00:00:00"); return isNaN(d)?null:d; };
 const nochesTotales = (b) => {
-  const n = Number(b?.nights||0);
-  if (n>0) return n;
+  // Las fechas mandan: así la suma de las partes por mes da siempre el total.
   const ci=_dLocal(b?.checkIn), co=_dLocal(b?.checkOut);
-  if(!ci||!co) return 0;
-  return Math.max(0, Math.round((co-ci)/86400000));
+  if(ci&&co){ const n=Math.round((co-ci)/86400000); if(n>0) return n; }
+  return Math.max(0, Number(b?.nights||0));
 };
 const nochesEnMes = (b, year, mes) => {            // mes: 0-11
   const ci=_dLocal(b?.checkIn), co=_dLocal(b?.checkOut);
@@ -3938,13 +3937,19 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
 
   const _hoyAn = new Date();
   const _esAnioActual = chartYear===_hoyAn.getFullYear();
-  const _mesesTranscurridos = _esAnioActual ? _hoyAn.getMonth()+1 : 12;
+  const _ultimoMesAn = _esAnioActual ? _hoyAn.getMonth() : 11;
   const _totTempBrutoUSD = _histo.reduce((s,h)=>s+h.cobradoUSD,0);
   const _totFijaBrutoUSD = _histo.reduce((s,h)=>s+h.fijaUSD,0);
-  const _totTempNetoUSD  = _totTempBrutoUSD - _gastosTempUSD*_mesesTranscurridos;
-  const _totFijaNetoUSD  = _totFijaBrutoUSD - _gastosFijaUSD*_mesesTranscurridos;
-  const _tempPorDeptoMes = (_tempPropsAn.length>0&&_mesesTranscurridos>0) ? _totTempNetoUSD/_tempPropsAn.length/_mesesTranscurridos : 0;
-  const _fijaPorDeptoMes = (_fixedPropsAn.length>0&&_mesesTranscurridos>0) ? _totFijaNetoUSD/_fixedPropsAn.length/_mesesTranscurridos : 0;
+  // Cada modalidad se mide desde el mes en que empezó a operar, no desde enero.
+  const _primerMesTemp = _histo.findIndex(h=>h.noches>0||h.cobradoUSD>0);
+  const _primerMesFija = _histo.findIndex(h=>h.fijaUSD>0);
+  const _mesesOpTemp = _primerMesTemp>=0 ? Math.max(0,_ultimoMesAn-_primerMesTemp+1) : 0;
+  const _mesesOpFija = _primerMesFija>=0 ? Math.max(0,_ultimoMesAn-_primerMesFija+1) : 0;
+  const _totTempNetoUSD  = _totTempBrutoUSD - _gastosTempUSD*_mesesOpTemp;
+  const _totFijaNetoUSD  = _totFijaBrutoUSD - _gastosFijaUSD*_mesesOpFija;
+  const _tempPorDeptoMes = (_tempPropsAn.length>0&&_mesesOpTemp>0) ? _totTempNetoUSD/_tempPropsAn.length/_mesesOpTemp : 0;
+  const _fijaPorDeptoMes = (_fixedPropsAn.length>0&&_mesesOpFija>0) ? _totFijaNetoUSD/_fixedPropsAn.length/_mesesOpFija : 0;
+  const _sinGastosFija = _fixedPropsAn.length>0 && _gastosFijaUSD<=0;
   const _ganaTemp = _tempPorDeptoMes>_fijaPorDeptoMes;
   const _difPorDepto = Math.abs(_tempPorDeptoMes-_fijaPorDeptoMes);
   const _mesesCumplidos = _histo.filter(h=>h.pct>=100).length;
@@ -4093,7 +4098,7 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
       {/* ⚖️ Temporal vs Renta mensual */}
       <div style={{...S.card, marginBottom:24}}>
         <div style={{fontSize:15,fontWeight:700}}>⚖️ Temporal vs Renta mensual · {chartYear}</div>
-        <div style={{fontSize:12,color:C.textSec,marginBottom:14,marginTop:2}}>Ingreso <strong>neto de gastos</strong>, en dólares. Sobre {_mesesTranscurridos} {_mesesTranscurridos===1?"mes":"meses"}.</div>
+        <div style={{fontSize:12,color:C.textSec,marginBottom:14,marginTop:2}}>Ingreso <strong>neto de gastos</strong>, en dólares. Cada modalidad se mide desde el mes en que empezó a operar: temporal {_mesesOpTemp} {_mesesOpTemp===1?"mes":"meses"}, mensual {_mesesOpFija} {_mesesOpFija===1?"mes":"meses"}.</div>
 
         <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Promedio por departamento, por mes</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:12}}>
@@ -4117,6 +4122,11 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
               : `Un depto en ${_ganaTemp?"temporal":"renta mensual"} te deja ${fUSD(_difPorDepto)} más por mes que en ${_ganaTemp?"renta mensual":"temporal"} — unos ${fUSD(_difPorDepto*12)} al año.`}
         </div>
 
+        {_sinGastosFija && (
+          <div style={{background:C.yellowLight,borderRadius:10,padding:"10px 12px",fontSize:12,color:C.yellow,marginBottom:16,lineHeight:1.5}}>
+            ⚠️ Tus propiedades de renta mensual no tienen <strong>gastos mensuales cargados</strong>, así que figuran con gasto cero y la comparación las favorece. Cargá expensas, ABL y demás en la ficha de cada propiedad (Propiedades → editar → Gastos mensuales) para que sea pareja.
+          </div>
+        )}
         <div style={{fontSize:11,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Totales del año</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 108px 108px",gap:8,fontSize:12,alignItems:"center"}}>
           <div style={{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase"}}>Concepto</div>
@@ -4127,9 +4137,9 @@ function Analytics({ properties, transactions, bookings=[], tc, pinnedValues, pi
           <div style={{textAlign:"right",fontWeight:600}}>{fUSD(_totTempBrutoUSD)}</div>
           <div style={{textAlign:"right",fontWeight:600}}>{fUSD(_totFijaBrutoUSD)}</div>
 
-          <div style={{color:C.textSec}}>Gastos ({_mesesTranscurridos} m)</div>
-          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosTempUSD*_mesesTranscurridos)}</div>
-          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosFijaUSD*_mesesTranscurridos)}</div>
+          <div style={{color:C.textSec}}>Gastos operativos</div>
+          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosTempUSD*_mesesOpTemp)}<div style={{fontSize:9,color:C.textMuted,fontWeight:400}}>{_mesesOpTemp} meses</div></div>
+          <div style={{textAlign:"right",color:C.red}}>−{fUSD(_gastosFijaUSD*_mesesOpFija)}<div style={{fontSize:9,color:C.textMuted,fontWeight:400}}>{_mesesOpFija} meses</div></div>
 
           <div style={{fontWeight:800,color:C.text,paddingTop:7,borderTop:"1px solid "+C.border}}>Neto</div>
           <div style={{textAlign:"right",fontWeight:800,paddingTop:7,borderTop:"1px solid "+C.border,color:_totTempNetoUSD>=0?C.green:C.red}}>{fUSD(_totTempNetoUSD)}</div>
@@ -5192,3 +5202,4 @@ function Accesos({ properties, bookings, tc, db }) {
     </div>
   );
 }
+
